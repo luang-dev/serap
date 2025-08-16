@@ -1,12 +1,12 @@
 <?php
 
-namespace VendorName\Skeleton\Commands;
+namespace Zzzul\Gol\Commands;
 
 use Illuminate\Console\Command;
 
-class SkeletonCommand extends Command
+class GolCommand extends Command
 {
-    public $signature = 'skeleton';
+    public $signature = 'gol';
 
     public $description = 'My command';
 
