@@ -2,9 +2,11 @@
 
 namespace Zzzul\Gol;
 
-use Spatie\LaravelPackageTools\Package;
-use Spatie\LaravelPackageTools\PackageServiceProvider;
 use Zzzul\Gol\Commands\GolCommand;
+use Spatie\LaravelPackageTools\Package;
+use Illuminate\Foundation\Console\AboutCommand;
+use Spatie\LaravelPackageTools\PackageServiceProvider;
+use Zzzul\Gol\Watchers\WatcherManager;
 
 class GolServiceProvider extends PackageServiceProvider
 {
@@ -16,10 +18,14 @@ class GolServiceProvider extends PackageServiceProvider
          * More info: https://github.com/spatie/laravel-package-tools
          */
         $package
-            ->name('gol')
+            ->name(name: 'gol')
             ->hasConfigFile()
-            ->hasViews()
-            ->hasMigration('create_gol_table')
-            ->hasCommand(GolCommand::class);
+            ->hasCommand(commandClassName: GolCommand::class);
+
+        WatcherManager::register(app: $this->app);
+
+        AboutCommand::add(section: 'Gol', data: fn(): array => [
+            'Version' => '0.1.0',
+        ]);
     }
 }

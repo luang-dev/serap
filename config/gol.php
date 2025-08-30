@@ -1,6 +1,37 @@
 <?php
 
-// config for Zzzul/Gol
 return [
-
+    'endpoint' => env('GOL_ENDPOINT', 'https://github.com/Zzzul/'),
+    'api_key' => env('GOL_API_KEY', null),
+    'sensitive_keys' => [
+        'api_key',
+        'password',
+        'token',
+        'secret',
+        'key',
+        'auth_token',
+        'access_token',
+        'refresh_token',
+        'client_secret',
+        'client_id',
+        'session_token',
+        'cookie',
+        'password_confirmation',
+        'authorization',
+        'laravel-session',
+        'set-cookie',
+        'xsrf-token',
+        'xsrf_token',
+        'csrf_token',
+        'csrf-token',
+        'pin',
+        'mpin',
+        'otp',
+        'm_pin',
+        'mfa',
+        'api_token',
+        'secret_key,',
+        'code',
+    ],
+     'mask' => '********',
 ];
