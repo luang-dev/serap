@@ -1,14 +1,14 @@
 <?php
 
-namespace Zzzul\Gol\Watchers;
+namespace LuangDev\Serap\Watchers;
 
 use Illuminate\Foundation\Application;
 
 class WatcherManager
 {
-    public static function register(Application $app)
+    public static function register()
     {
         QueryWatcher::handle();
-        ExceptionWatcher::handle($app);
+        ExceptionWatcher::handle();
     }
 }

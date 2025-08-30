@@ -1,5 +1,5 @@
 <?php
 
-use Zzzul\Gol\Tests\TestCase;
+use LuangDev\Serap\Tests\TestCase;
 
 uses(TestCase::class)->in(__DIR__);

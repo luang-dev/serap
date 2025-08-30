@@ -1,6 +1,6 @@
 <?php
 
-namespace Zzzul\Gol\Database\Factories;
+namespace LuangDev\Serap\Database\Factories;
 
 use Illuminate\Database\Eloquent\Factories\Factory;
 

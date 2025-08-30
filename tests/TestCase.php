@@ -1,10 +1,10 @@
 <?php
 
-namespace Zzzul\Gol\Tests;
+namespace LuangDev\Serap\Tests;
 
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Orchestra\Testbench\TestCase as Orchestra;
-use Zzzul\Gol\GolServiceProvider;
+use LuangDev\Serap\GolServiceProvider;
 
 class TestCase extends Orchestra
 {

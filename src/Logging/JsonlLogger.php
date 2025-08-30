@@ -1,6 +1,6 @@
 <?php
 
-namespace Zzzul\Gol\Logging;
+namespace LuangDev\Serap\Logging;
 
 use Psr\Log\AbstractLogger;
 use Psr\Log\LoggerInterface;

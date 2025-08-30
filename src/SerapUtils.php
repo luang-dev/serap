@@ -1,29 +1,29 @@
 <?php
 
-namespace Zzzil\Gol;
+namespace LuangDev\Serap;
 
 use Illuminate\Support\Facades\Context;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Response;
 
-class Utils
+class SerapUtils
 {
     public const MAX_RESPONSE_LENGTH = 10_000;
 
     public static function mask(array $data, array $sensitiveKeys = [], string $mask = '******'): array
     {
-        if (count($sensitiveKeys) == 0) {
-            $sensitiveKeys = config('gol.sensitive_keys', []);
+        if (count(value: $sensitiveKeys) == 0) {
+            $sensitiveKeys = config(key: 'gol.sensitive_keys', default: []);
         }
 
         $lowerKeys = array_map('strtolower', $sensitiveKeys);
 
         foreach ($data as $key => $value) {
-            if (in_array(strtolower($key), $lowerKeys)) {
+            if (in_array(needle: strtolower(string: $key), haystack: $lowerKeys)) {
                 $data[$key] = $mask;
-            } elseif (is_array($value)) {
-                $data[$key] = self::mask($value);
+            } elseif (is_array(value: $value)) {
+                $data[$key] = self::mask(data: $value);
             }
         }
 
@@ -135,6 +135,6 @@ class Utils
 
     public static function getTraceId()
     {
-        return Context::get(key: 'gol_trace_id');
+        return Context::get(key: 'serao_trace_id');
     }
 }

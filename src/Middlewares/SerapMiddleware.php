@@ -1,42 +1,42 @@
 <?php
 
-namespace Zzzul\Gol\Middlewares;
+namespace LuangDev\Serap\Middlewares;
 
-use BackedEnum;
 use Closure;
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\Pivot;
-use Illuminate\Http\Request;
-use Illuminate\Http\Response as IlluminateResponse;
-use Illuminate\Support\Arr;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Context;
-use Illuminate\Support\Str;
+use BackedEnum;
 use Illuminate\View\View;
+use LuangDev\Serap\SerapUtils;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Str;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Context;
+use LuangDev\Serap\Services\LogWriterService;
 use Symfony\Component\HttpFoundation\Response;
-use Zzzil\Gol\Utils;
-use Zzzul\Gol\Services\LogWriterService;
+use Illuminate\Database\Eloquent\Relations\Pivot;
+use Illuminate\Http\Response as IlluminateResponse;
 
-class CaptureLogMiddleware
+class SerapMiddleware
 {
     public function handle(Request $request, Closure $next): Response
     {
         $start = microtime(as_float: true);
 
-        $traceId = Utils::generateTraceId();
-        Context::add(key: 'gol_trace_id', value: $traceId);
+        $traceId = SerapUtils::generateTraceId();
+        Context::add(key: 'serao_trace_id', value: $traceId);
 
         LogWriterService::write(eventName: 'request', data: [
             'uri' => str_replace($request->root(), '', $request->fullUrl()) ?: '/',
             'method' => $request->method(),
             'controller_action' => $request->route()?->getActionName(),
             'middleware' => array_values($request->route()?->gatherMiddleware() ?? []),
-            'session' => Utils::mask($request->hasSession() ? $request->session()->all() : []),
-            'memory' => Utils::getMemoryUsage(),
+            'session' => SerapUtils::mask($request->hasSession() ? $request->session()->all() : []),
+            'memory' => SerapUtils::getMemoryUsage(),
             'user' => Auth::user(),
-            'params' => Utils::mask(data: $request->query->all()),
-            'headers' => Utils::mask(data: $request->headers->all()),
-            'payload' => Utils::mask(data: $request->all()),
+            'params' => SerapUtils::mask(data: $request->query->all()),
+            'headers' => SerapUtils::mask(data: $request->headers->all()),
+            'payload' => SerapUtils::mask(data: $request->all()),
         ]);
 
         $response = $next($request);
@@ -45,7 +45,7 @@ class CaptureLogMiddleware
 
         $duration = round(num: (microtime(as_float: true) - $start) * 1000, precision: 2);
 
-        $type = Utils::detectResponseType(response: $response);
+        $type = SerapUtils::detectResponseType(response: $response);
 
         if ($response instanceof IlluminateResponse && $response->getOriginalContent() instanceof View) {
             $views = [
@@ -60,9 +60,9 @@ class CaptureLogMiddleware
             'status' => $response->getStatusCode(),
             'duration_ms' => $duration,
             'type' => $type,
-            'memory' => Utils::getMemoryUsage(),
-            'headers' => Utils::mask(data: $response->headers->all()),
-            'response' => Utils::safeContent(content: $response->getContent(), type: $type),
+            'memory' => SerapUtils::getMemoryUsage(),
+            'headers' => SerapUtils::mask(data: $response->headers->all()),
+            'response' => SerapUtils::safeContent(content: $response->getContent(), type: $type),
             'views' => $views,
         ]);
 
@@ -83,10 +83,10 @@ class CaptureLogMiddleware
             } elseif (is_object($value)) {
                 return [
                     'class' => get_class($value),
-                    'properties' => Utils::safeContent(json_encode($value), 'json'),
+                    'properties' => SerapUtils::safeContent(json_encode($value), 'json'),
                 ];
             } else {
-                return Utils::safeContent(json_encode($value), 'json');
+                return SerapUtils::safeContent(json_encode($value), 'json');
             }
         })->toArray();
     }

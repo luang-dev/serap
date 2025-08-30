@@ -1,5 +1,5 @@
 <?php
 
-namespace Zzzul\Gol\Jobs;
+namespace LuangDev\Serap\Jobs;
 
 class FlushLogJob {}

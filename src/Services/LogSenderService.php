@@ -1,5 +1,5 @@
 <?php
 
-namespace Zzzul\Gol\Services;
+namespace LuangDev\Serap\Services;
 
 class LogSenderService {}

@@ -1,16 +1,16 @@
 <?php
 
-namespace Zzzul\Gol\Watchers;
+namespace LuangDev\Serap\Watchers;
 
 use Illuminate\Foundation\Application;
 use Throwable;
-use Zzzul\Gol\Services\LogWriterService;
+use LuangDev\Serap\Services\LogWriterService;
 
 class ExceptionWatcher
 {
-    public static function handle(Application $app): void
+    public static function handle(): void
     {
-        $app->afterResolving(\Illuminate\Contracts\Debug\ExceptionHandler::class, function ($handler) {
+        app()->afterResolving(\Illuminate\Contracts\Debug\ExceptionHandler::class, function ($handler) {
             $handler->reportable(function (Throwable $e) {
                 LogWriterService::write('exception', self::formatExceptionData($e), 'error');
             });

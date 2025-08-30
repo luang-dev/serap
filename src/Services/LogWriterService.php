@@ -1,9 +1,9 @@
 <?php
 
-namespace Zzzul\Gol\Services;
+namespace LuangDev\Serap\Services;
 
 use SplFileObject;
-use Zzzil\Gol\Utils;
+use LuangDev\Serap\SerapUtils;
 
 class LogWriterService
 {
@@ -14,7 +14,7 @@ class LogWriterService
         $file = new SplFileObject(filename: $path, mode: 'a');
 
         $file->fwrite(data: json_encode(value: [
-            'trace_id' => Utils::getTraceId(),
+            'trace_id' => SerapUtils::getTraceId(),
             'event' => $eventName,
             'level' => $level,
             'time' => now()->toISOString(),

@@ -1,11 +1,11 @@
 <?php
 
-namespace Zzzul\Gol\Watchers;
+namespace LuangDev\Serap\Watchers;
 
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Facades\DB;
-use Zzzil\Gol\Utils;
-use Zzzul\Gol\Services\LogWriterService;
+use LuangDev\Serap\Services\LogWriterService;
+use LuangDev\Serap\SerapUtils;
 
 class QueryWatcher
 {
@@ -19,7 +19,7 @@ class QueryWatcher
                 'sql' => $query->sql,
                 'bindings' => $maskedBindings,
                 'duration' => $query->time,
-                'memory' => Utils::getMemoryUsage(),
+                'memory' => SerapUtils::getMemoryUsage(),
                 'connection' => $query->connection,
                 'connection_name' => $query->connectionName,
             ]);

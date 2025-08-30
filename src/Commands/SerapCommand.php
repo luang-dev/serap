@@ -1,10 +1,10 @@
 <?php
 
-namespace Zzzul\Gol\Commands;
+namespace LuangDev\Serap\Commands;
 
 use Illuminate\Console\Command;
 
-class GolCommand extends Command
+class SerapCommand extends Command
 {
     public $signature = 'gol';
 
