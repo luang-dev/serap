@@ -36,7 +36,7 @@ class ExceptionWatcher
                 $content = $lines[$i];
 
                 if (($i + 1) === $line) {
-                    $content .= "    // <--- error line";
+                    $content .= '    // <--- error line';
                 }
 
                 $linePreview[$i + 1] = $content;
@@ -54,7 +54,7 @@ class ExceptionWatcher
             //     'previous' => $e->getPrevious() ? get_class($e->getPrevious()) : null,
             // ],
             'trace' => array_map(
-                fn($t) => [
+                fn ($t) => [
                     'file' => $t['file'] ?? null,
                     'line' => $t['line'] ?? null,
                     'function' => $t['function'] ?? null,

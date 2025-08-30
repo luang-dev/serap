@@ -2,7 +2,4 @@
 
 namespace Zzzul\Gol\Jobs;
 
-class FlushLogJob
-{
-
-}
+class FlushLogJob {}

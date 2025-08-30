@@ -2,10 +2,10 @@
 
 namespace Zzzul\Gol;
 
-use Zzzul\Gol\Commands\GolCommand;
-use Spatie\LaravelPackageTools\Package;
 use Illuminate\Foundation\Console\AboutCommand;
+use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
+use Zzzul\Gol\Commands\GolCommand;
 use Zzzul\Gol\Watchers\WatcherManager;
 
 class GolServiceProvider extends PackageServiceProvider
@@ -24,7 +24,7 @@ class GolServiceProvider extends PackageServiceProvider
 
         WatcherManager::register(app: $this->app);
 
-        AboutCommand::add(section: 'Gol', data: fn(): array => [
+        AboutCommand::add(section: 'Gol', data: fn (): array => [
             'Version' => '0.1.0',
         ]);
     }

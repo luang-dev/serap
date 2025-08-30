@@ -2,8 +2,8 @@
 
 namespace Zzzul\Gol\Logging;
 
-use Psr\Log\LoggerInterface;
 use Psr\Log\AbstractLogger;
+use Psr\Log\LoggerInterface;
 
 class JsonlLogger extends AbstractLogger implements LoggerInterface
 {
@@ -27,7 +27,7 @@ class JsonlLogger extends AbstractLogger implements LoggerInterface
 
         file_put_contents(
             $this->logPath,
-            json_encode($record, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . PHP_EOL,
+            json_encode($record, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE).PHP_EOL,
             FILE_APPEND | LOCK_EX
         );
     }

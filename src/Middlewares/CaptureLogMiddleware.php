@@ -2,20 +2,20 @@
 
 namespace Zzzul\Gol\Middlewares;
 
-use Closure;
 use BackedEnum;
-use Zzzil\Gol\Utils;
-use Illuminate\View\View;
-use Illuminate\Support\Arr;
-use Illuminate\Support\Str;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
+use Closure;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Context;
-use Zzzul\Gol\Services\LogWriterService;
-use Symfony\Component\HttpFoundation\Response;
 use Illuminate\Database\Eloquent\Relations\Pivot;
+use Illuminate\Http\Request;
 use Illuminate\Http\Response as IlluminateResponse;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Context;
+use Illuminate\Support\Str;
+use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\Response;
+use Zzzil\Gol\Utils;
+use Zzzul\Gol\Services\LogWriterService;
 
 class CaptureLogMiddleware
 {
@@ -50,9 +50,9 @@ class CaptureLogMiddleware
         if ($response instanceof IlluminateResponse && $response->getOriginalContent() instanceof View) {
             $views = [
                 'view' => Str::after($response->getOriginalContent()->getPath(), 'views/'),
-                'data' => $this->extractDataFromView($response->getOriginalContent())
+                'data' => $this->extractDataFromView($response->getOriginalContent()),
             ];
-        }else{
+        } else {
             $views = [];
         }
 
@@ -69,7 +69,7 @@ class CaptureLogMiddleware
         return $response;
     }
 
-     /**
+    /**
      * Extract the data from the given view in array form.
      *
      * @param  \Illuminate\View\View  $view
@@ -91,13 +91,13 @@ class CaptureLogMiddleware
         })->toArray();
     }
 
-     /**
+    /**
      * Format the given model to a readable string.
      *
      * @param  \Illuminate\Database\Eloquent\Model  $model
      * @return string
      */
-     public static function given($model)
+    public static function given($model)
     {
         if ($model instanceof Pivot && ! $model->incrementing) {
             $keys = [

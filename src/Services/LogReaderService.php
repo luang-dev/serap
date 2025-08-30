@@ -2,7 +2,4 @@
 
 namespace Zzzul\Gol\Services;
 
-class LogReaderService
-{
-
-}
+class LogReaderService {}

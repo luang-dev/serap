@@ -2,17 +2,16 @@
 
 namespace Zzzul\Gol\Watchers;
 
-use Zzzil\Gol\Utils;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Context;
-use Zzzul\Gol\Services\LogWriterService;
 use Illuminate\Database\Events\QueryExecuted;
+use Illuminate\Support\Facades\DB;
+use Zzzil\Gol\Utils;
+use Zzzul\Gol\Services\LogWriterService;
 
 class QueryWatcher
 {
     public static function handle(): void
     {
-         DB::listen(callback: function (QueryExecuted $query): void {
+        DB::listen(callback: function (QueryExecuted $query): void {
             $bindings = $query->bindings ?? [];
             $maskedBindings = self::mapBindingsWithColumns(sql: $query->sql, bindings: $bindings);
 

@@ -2,7 +2,4 @@
 
 namespace Zzzul\Gol\Services;
 
-class LogSenderService
-{
-
-}
+class LogSenderService {}

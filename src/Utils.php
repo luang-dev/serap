@@ -2,10 +2,10 @@
 
 namespace Zzzil\Gol;
 
-use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Context;
-use Symfony\Component\HttpFoundation\Response;
+use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\RedirectResponse;
+use Symfony\Component\HttpFoundation\Response;
 
 class Utils
 {
@@ -44,18 +44,24 @@ class Utils
     {
         $contentType = $response->headers->get('Content-Type');
 
-        if (!$contentType)
+        if (! $contentType) {
             return 'unknown';
-        if (str_contains($contentType, 'application/json'))
+        }
+        if (str_contains($contentType, 'application/json')) {
             return 'json';
-        if (str_contains($contentType, 'text/html'))
+        }
+        if (str_contains($contentType, 'text/html')) {
             return 'html';
-        if (str_contains($contentType, 'text/plain'))
+        }
+        if (str_contains($contentType, 'text/plain')) {
             return 'text';
-        if (str_contains($contentType, 'application/octet-stream'))
+        }
+        if (str_contains($contentType, 'application/octet-stream')) {
             return 'stream';
-        if (str_contains($contentType, 'application/pdf') || str_contains($contentType, 'application/zip'))
+        }
+        if (str_contains($contentType, 'application/pdf') || str_contains($contentType, 'application/zip')) {
             return 'download';
+        }
 
         if ($response instanceof RedirectResponse) {
             return 'redirect';
@@ -71,7 +77,7 @@ class Utils
 
         if ($type !== 'json') {
             if (mb_strlen($content) > self::MAX_RESPONSE_LENGTH) {
-                $data = mb_substr($content, 0, self::MAX_RESPONSE_LENGTH) . '... [TRUNCATED]';
+                $data = mb_substr($content, 0, self::MAX_RESPONSE_LENGTH).'... [TRUNCATED]';
                 $isTruncated = true;
             }
 
@@ -86,7 +92,7 @@ class Utils
         if (json_last_error() !== JSON_ERROR_NONE) {
             // fallback: treat as text
             if (mb_strlen($content) > self::MAX_RESPONSE_LENGTH) {
-                $data = mb_substr($content, 0, self::MAX_RESPONSE_LENGTH) . '... [TRUNCATED]';
+                $data = mb_substr($content, 0, self::MAX_RESPONSE_LENGTH).'... [TRUNCATED]';
                 $isTruncated = true;
             }
 
