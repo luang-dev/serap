@@ -2,9 +2,8 @@
 
 namespace LuangDev\Serap\Watchers;
 
-use Illuminate\Foundation\Application;
-use Throwable;
 use LuangDev\Serap\Services\LogWriterService;
+use Throwable;
 
 class ExceptionWatcher
 {

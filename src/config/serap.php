@@ -33,5 +33,5 @@ return [
         'secret_key,',
         'code',
     ],
-     'mask' => '********',
+    'mask' => '********',
 ];

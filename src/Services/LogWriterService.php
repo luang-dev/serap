@@ -2,8 +2,8 @@
 
 namespace LuangDev\Serap\Services;
 
-use SplFileObject;
 use LuangDev\Serap\SerapUtils;
+use SplFileObject;
 
 class LogWriterService
 {
