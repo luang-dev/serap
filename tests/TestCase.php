@@ -3,8 +3,8 @@
 namespace LuangDev\Serap\Tests;
 
 use Illuminate\Database\Eloquent\Factories\Factory;
+use LuangDev\Serap\SerapServiceProvider;
 use Orchestra\Testbench\TestCase as Orchestra;
-use LuangDev\Serap\GolServiceProvider;
 
 class TestCase extends Orchestra
 {
@@ -13,14 +13,14 @@ class TestCase extends Orchestra
         parent::setUp();
 
         Factory::guessFactoryNamesUsing(
-            fn (string $modelName) => 'Zzzul\\Gol\\Database\\Factories\\'.class_basename($modelName).'Factory'
+            fn (string $modelName) => 'LuangDev\\Serap\\Database\\Factories\\'.class_basename($modelName).'Factory'
         );
     }
 
     protected function getPackageProviders($app)
     {
         return [
-            GolServiceProvider::class,
+            SerapServiceProvider::class,
         ];
     }
 

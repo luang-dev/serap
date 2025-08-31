@@ -3,12 +3,12 @@
 namespace LuangDev\Serap;
 
 use Illuminate\Foundation\Console\AboutCommand;
-use Spatie\LaravelPackageTools\Package;
-use Spatie\LaravelPackageTools\PackageServiceProvider;
+use Illuminate\Support\Facades\Route;
 use LuangDev\Serap\Commands\SerapCommand;
 use LuangDev\Serap\Middlewares\SerapMiddleware;
 use LuangDev\Serap\Watchers\WatcherManager;
-use Illuminate\Support\Facades\Route;
+use Spatie\LaravelPackageTools\Package;
+use Spatie\LaravelPackageTools\PackageServiceProvider;
 
 class SerapServiceProvider extends PackageServiceProvider
 {
@@ -29,7 +29,7 @@ class SerapServiceProvider extends PackageServiceProvider
         Route::pushMiddlewareToGroup('web', SerapMiddleware::class);
         Route::pushMiddlewareToGroup('api', SerapMiddleware::class);
 
-        AboutCommand::add(section: 'Gol', data: fn(): array => [
+        AboutCommand::add(section: 'Gol', data: fn (): array => [
             'Version' => '0.0.1',
         ]);
     }

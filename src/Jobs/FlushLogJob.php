@@ -2,4 +2,7 @@
 
 namespace LuangDev\Serap\Jobs;
 
-class FlushLogJob {}
+class FlushLogJob
+{
+    // TODO
+}

@@ -2,4 +2,7 @@
 
 namespace LuangDev\Serap;
 
-class Serap {}
+class Serap
+{
+    // TODO
+}

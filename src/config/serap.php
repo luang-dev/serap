@@ -1,7 +1,7 @@
 <?php
 
 return [
-    'endpoint' => env('SERAP_ENDPOINT', 'https://github.com/luang-dev/serap'),
+    'endpoint' => env('SERAP_INGEST_ENDPOINT', 'https://github.com/luang-dev/serap'),
     'api_key' => env('SERAP_API_KEY', null),
     'sensitive_keys' => [
         'api_key',
@@ -33,5 +33,5 @@ return [
         'secret_key,',
         'code',
     ],
-     'mask' => '********',
+    'mask' => '********',
 ];

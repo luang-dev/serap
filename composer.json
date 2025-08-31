@@ -1,12 +1,12 @@
 {
-    "name": "zzzul/gol",
+    "name": "luang-dev/serap",
     "description": "free self hosted monitoring tool for your laravel app",
     "keywords": [
-        "Zzzul",
         "laravel",
-        "gol"
+        "php",
+        "package"
     ],
-    "homepage": "https://github.com/zzzul/gol",
+    "homepage": "https://github.com/luang-dev/serap",
     "license": "MIT",
     "authors": [
         {
@@ -34,13 +34,13 @@
     },
     "autoload": {
         "psr-4": {
-            "Zzzul\\Gol\\": "src/",
-            "Zzzul\\Gol\\Database\\Factories\\": "database/factories/"
+            "LuangDev\\Serap\\": "src/",
+            "LuangDev\\Serap\\Database\\Factories\\": "database/factories/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "Zzzul\\Gol\\Tests\\": "tests/",
+            "LuangDev\\Serap\\Tests\\": "tests/",
             "Workbench\\App\\": "workbench/app/"
         }
     },
@@ -62,10 +62,10 @@
     "extra": {
         "laravel": {
             "providers": [
-                "Zzzul\\Gol\\GolServiceProvider"
+                "LuangDev\\Serap\\SerapServiceProvider"
             ],
             "aliases": {
-                "Gol": "Zzzul\\Gol\\Facades\\Gol"
+                "Gol": "LuangDev\\Serap\\Facades\\Gol"
             }
         }
     },

@@ -2,20 +2,20 @@
 
 namespace LuangDev\Serap\Middlewares;
 
-use Closure;
 use BackedEnum;
+use Closure;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\Pivot;
+use Illuminate\Http\Request;
+use Illuminate\Http\Response as IlluminateResponse;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Context;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 use LuangDev\Serap\SerapUtils;
-use Illuminate\Support\Arr;
-use Illuminate\Support\Str;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Context;
 use LuangDev\Serap\Services\LogWriterService;
 use Symfony\Component\HttpFoundation\Response;
-use Illuminate\Database\Eloquent\Relations\Pivot;
-use Illuminate\Http\Response as IlluminateResponse;
 
 class SerapMiddleware
 {

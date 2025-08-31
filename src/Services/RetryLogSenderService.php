@@ -2,4 +2,7 @@
 
 namespace LuangDev\Serap\Services;
 
-class RetryLogSenderService {}
+class RetryLogSenderService
+{
+    // TODO
+}

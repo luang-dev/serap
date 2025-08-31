@@ -2,9 +2,8 @@
 
 namespace LuangDev\Serap\Watchers;
 
-use Illuminate\Foundation\Application;
-use Throwable;
 use LuangDev\Serap\Services\LogWriterService;
+use Throwable;
 
 class ExceptionWatcher
 {
@@ -49,10 +48,6 @@ class ExceptionWatcher
             'file' => $file,
             'line' => $line,
             'line_preview' => $linePreview,
-            // 'exception_context' => [
-            //     'code' => $e->getCode(),
-            //     'previous' => $e->getPrevious() ? get_class($e->getPrevious()) : null,
-            // ],
             'trace' => array_map(
                 fn ($t) => [
                     'file' => $t['file'] ?? null,

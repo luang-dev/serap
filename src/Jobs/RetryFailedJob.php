@@ -2,4 +2,7 @@
 
 namespace LuangDev\Serap\Jobs;
 
-class RetryFailedJob {}
+class RetryFailedJob
+{
+    // TODO
+}

@@ -4,8 +4,8 @@ namespace LuangDev\Serap\Watchers;
 
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Facades\DB;
-use LuangDev\Serap\Services\LogWriterService;
 use LuangDev\Serap\SerapUtils;
+use LuangDev\Serap\Services\LogWriterService;
 
 class QueryWatcher
 {

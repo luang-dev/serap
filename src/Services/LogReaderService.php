@@ -2,4 +2,7 @@
 
 namespace LuangDev\Serap\Services;
 
-class LogReaderService {}
+class LogReaderService
+{
+    // TODO
+}
