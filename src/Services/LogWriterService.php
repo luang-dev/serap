@@ -2,9 +2,9 @@
 
 namespace LuangDev\Serap\Services;
 
-use SplFileObject;
-use LuangDev\Serap\SerapUtils;
 use Illuminate\Support\Facades\Auth;
+use LuangDev\Serap\SerapUtils;
+use SplFileObject;
 
 class LogWriterService
 {
@@ -22,7 +22,7 @@ class LogWriterService
                 'time' => now()->toISOString(),
                 'user' => Auth::user(),
                 'context' => $data,
-            ], flags: JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . PHP_EOL
+            ], flags: JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE).PHP_EOL
         );
     }
 }
