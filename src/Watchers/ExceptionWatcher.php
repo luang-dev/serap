@@ -2,9 +2,9 @@
 
 namespace LuangDev\Serap\Watchers;
 
-use Throwable;
-use LuangDev\Serap\SerapUtils;
 use Illuminate\Contracts\Debug\ExceptionHandler;
+use LuangDev\Serap\SerapUtils;
+use Throwable;
 
 class ExceptionWatcher
 {
