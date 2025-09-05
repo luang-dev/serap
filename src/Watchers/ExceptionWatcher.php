@@ -2,16 +2,19 @@
 
 namespace LuangDev\Serap\Watchers;
 
-use LuangDev\Serap\Services\LogWriterService;
 use Throwable;
+use LuangDev\Serap\SerapUtils;
+use Illuminate\Contracts\Debug\ExceptionHandler;
 
 class ExceptionWatcher
 {
     public static function handle(): void
     {
-        app()->afterResolving(\Illuminate\Contracts\Debug\ExceptionHandler::class, function ($handler) {
+        app()->afterResolving(ExceptionHandler::class, function ($handler) {
             $handler->reportable(function (Throwable $e) {
-                LogWriterService::write('exception', self::formatExceptionData($e), 'error');
+                $context = self::formatExceptionData($e);
+
+                SerapUtils::writeJsonl(eventName: 'exception', context: $context, level: 'error');
             });
         });
     }

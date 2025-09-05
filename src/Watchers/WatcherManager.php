@@ -8,5 +8,6 @@ class WatcherManager
     {
         QueryWatcher::handle();
         ExceptionWatcher::handle();
+        RequestResponseManager::handle();
     }
 }

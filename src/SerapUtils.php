@@ -2,8 +2,10 @@
 
 namespace LuangDev\Serap;
 
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Context;
 use Illuminate\Support\Str;
+use SplFileObject;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -13,21 +15,67 @@ class SerapUtils
 
     public static function mask(array $data, array $sensitiveKeys = [], string $mask = '******'): array
     {
-        if (count(value: $sensitiveKeys) == 0) {
-            $sensitiveKeys = config(key: 'gol.sensitive_keys', default: []);
+        if (count($sensitiveKeys) === 0) {
+            $sensitiveKeys = config('serap.sensitive_keys', []);
         }
 
-        $lowerKeys = array_map('strtolower', $sensitiveKeys);
+        // normalisasi daftar key sensitif
+        $normalizedKeys = array_map(fn ($k) => self::normalizeKey($k), $sensitiveKeys);
 
         foreach ($data as $key => $value) {
-            if (in_array(needle: strtolower(string: $key), haystack: $lowerKeys)) {
+            $normalizedKey = self::normalizeKey($key);
+
+            // khusus untuk cookie/set-cookie
+            if (in_array($normalizedKey, ['cookie', 'set_cookie'], true)) {
+                if (is_array($value)) {
+                    $data[$key] = array_map(function ($cookieString) use ($normalizedKeys, $mask) {
+                        return self::maskCookieString($cookieString, $normalizedKeys, $mask);
+                    }, $value);
+                } elseif (is_string($value)) {
+                    $data[$key] = self::maskCookieString($value, $normalizedKeys, $mask);
+                }
+            } elseif (in_array($normalizedKey, $normalizedKeys, true)) {
+                // kalau key biasa sensitif
                 $data[$key] = $mask;
-            } elseif (is_array(value: $value)) {
-                $data[$key] = self::mask(data: $value);
+            } elseif (is_array($value)) {
+                $data[$key] = self::mask($value, $sensitiveKeys, $mask);
             }
         }
 
         return $data;
+    }
+
+    /**
+     * Masking khusus cookie/set-cookie
+     */
+    protected static function maskCookieString(string $cookieString, array $normalizedKeys, string $mask): string
+    {
+        $parts = explode(';', $cookieString);
+
+        foreach ($parts as &$part) {
+            $kv = explode('=', $part, 2);
+
+            if (count($kv) === 2) {
+                $cookieKey = self::normalizeKey($kv[0]);
+
+                if (in_array($cookieKey, $normalizedKeys, true)) {
+                    $part = trim($kv[0]).'='.$mask;
+                }
+            }
+        }
+
+        return implode(';', $parts);
+    }
+
+    /**
+     * Normalisasi key jadi snake_case lowercase
+     */
+    protected static function normalizeKey(string $key): string
+    {
+        $key = trim($key);
+        $key = strtolower($key);
+
+        return str_replace('-', '_', $key);
     }
 
     public static function generateTraceId(): string
@@ -70,7 +118,7 @@ class SerapUtils
         return $contentType;
     }
 
-    public static function safeContent(string $content, string $type = 'text'): string
+    public static function safeContent(string $content, string $type = 'text')
     {
         $isTruncated = false;
         $data = $content;
@@ -81,11 +129,15 @@ class SerapUtils
                 $isTruncated = true;
             }
 
-            return json_encode([
+            // return json_encode([
+            //     'is_truncated' => $isTruncated,
+            //     'data' => $data,
+            // ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+            return [
                 'is_truncated' => $isTruncated,
-                'notice' => $isTruncated ? 'TRUNCATED' : 'NOT TRUNCATED',
                 'data' => $data,
-            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            ];
         }
 
         $decoded = json_decode($content, true);
@@ -96,11 +148,15 @@ class SerapUtils
                 $isTruncated = true;
             }
 
-            return json_encode([
+            // return json_encode([
+            //     'is_truncated' => $isTruncated,
+            //     'data' => $data,
+            // ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+            return [
                 'is_truncated' => $isTruncated,
-                'notice' => $isTruncated ? 'TRUNCATED' : 'NOT TRUNCATED',
                 'data' => $data,
-            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            ];
         }
 
         $json = json_encode($decoded, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -121,11 +177,15 @@ class SerapUtils
             $data = $decoded;
         }
 
-        return json_encode([
+        // return json_encode([
+        //     'is_truncated' => $isTruncated,
+        //     'data' => $data,
+        // ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+        return [
             'is_truncated' => $isTruncated,
-            'notice' => $isTruncated ? 'TRUNCATED' : 'NOT TRUNCATED',
             'data' => $data,
-        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        ];
     }
 
     public static function getMemoryUsage(): float
@@ -135,6 +195,53 @@ class SerapUtils
 
     public static function getTraceId()
     {
-        return Context::get(key: 'serao_trace_id');
+        return Context::get(key: 'serap_trace_id');
+    }
+
+    public static function writeJsonl(string $eventName, array $context, string $level = 'info'): void
+    {
+        $traceId = SerapUtils::getTraceId();
+        $path = storage_path('logs/serap.jsonl');
+
+        $file = new SplFileObject($path, 'a');
+
+        // lock exclusive
+        if ($file->flock(LOCK_EX)) {
+            $log = [
+                'trace_id' => $traceId,
+                'event' => $eventName,
+                'level' => $level,
+                'time' => now()->toISOString(),
+                'user' => self::getAuthUser(),
+                'context' => $context,
+            ];
+
+            $file->fwrite(
+                json_encode(
+                    $log,
+                    JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+                ).PHP_EOL
+            );
+
+            // release lock
+            $file->flock(LOCK_UN);
+        }
+    }
+
+    public static function getAuthUser(): ?array
+    {
+        $user = Auth::user();
+
+        if (! $user) {
+            return null;
+        }
+
+        return [
+            'id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'username' => $user?->username,
+            'created_at' => $user?->created_at,
+        ];
     }
 }

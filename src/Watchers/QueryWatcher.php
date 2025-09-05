@@ -3,69 +3,152 @@
 namespace LuangDev\Serap\Watchers;
 
 use Illuminate\Database\Events\QueryExecuted;
+use Illuminate\Support\Facades\Context;
 use Illuminate\Support\Facades\DB;
-use LuangDev\Serap\SerapUtils;
-use LuangDev\Serap\Services\LogWriterService;
 
 class QueryWatcher
 {
     public static function handle(): void
     {
         DB::listen(callback: function (QueryExecuted $query): void {
+            if (self::shouldSkipQuery($query->sql)) {
+                return;
+            }
+
             $bindings = $query->bindings ?? [];
             $maskedBindings = self::mapBindingsWithColumns(sql: $query->sql, bindings: $bindings);
 
-            LogWriterService::write(eventName: 'query', data: [
+            $context = [
                 'sql' => $query->sql,
                 'bindings' => $maskedBindings,
                 'duration' => $query->time,
-                'memory' => SerapUtils::getMemoryUsage(),
-                'connection' => $query->connection,
-                'connection_name' => $query->connectionName,
-            ]);
+                'connection' => $query?->connectionName,
+            ];
+
+            $queries = Context::get('serap_queries', []);
+            $queries[] = $context;
+
+            Context::add('serap_queries', $queries);
         });
+    }
+
+    protected static function shouldSkipQuery(string $sql): bool
+    {
+        $skipTables = ['jobs', 'failed_jobs', 'cache', 'sessions'];
+
+        foreach ($skipTables as $table) {
+            if (
+                stripos($sql, '"'.$table.'"') !== false ||
+                stripos($sql, '`'.$table.'`') !== false ||
+                stripos($sql, ' '.$table.' ') !== false
+            ) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public static function mapBindingsWithColumns(string $sql, array $bindings): array
     {
-        $maskFields = array_map('strtolower', config('gol.sensitive_keys', default: []));
-        $maskChar = config(key: 'gol.mask', default: '********');
-
-        $columns = [];
-
-        // Pattern INSERT: INSERT INTO table (col1, col2) values (?, ?)
-        if (preg_match('/\(([^)]+)\)\s*values\s*\(/i', $sql, $m)) {
-            $columns = array_map(function ($c) {
-                return str_replace(['`', '"'], '', trim($c));
-            }, explode(',', $m[1]));
-        }
-
-        // Pattern UPDATE: UPDATE table SET col1 = ?, col2 = ?, ...
-        if (preg_match_all('/["`]?(\\w+)["`]?\s*=\s*\?/i', $sql, $m)) {
-            foreach ($m[1] as $col) {
-                $columns[] = str_replace(['`', '"'], '', $col);
-            }
-        }
-
-        // Pattern WHERE ... col = ?
-        if (preg_match_all('/where\s+["`]?(\\w+)["`]?\s*=\s*\?/i', $sql, $m)) {
-            foreach ($m[1] as $col) {
-                $columns[] = str_replace(['`', '"'], '', $col);
-            }
-        }
-
         $mapped = [];
-        foreach (array_values($bindings) as $i => $value) {
-            $col = $columns[$i] ?? "unknown_{$i}";
-            $colLower = strtolower($col);
+        $bindingIndex = 0;
 
-            if (in_array($colLower, $maskFields, true)) {
-                $mapped[$col] = $maskChar;
-            } else {
-                $mapped[$col] = $value;
+        $sensitive = array_map(fn ($k) => self::normalizeKey($k), config('gol.sensitive_keys', ['password']));
+
+        // WHERE col = ? / col > ? / etc
+        if (preg_match_all('/([`\w\.\"]+)\s*(=|<|>|<=|>=|LIKE|BETWEEN|IN)\s*(\?|[\(])/i', $sql, $matches, PREG_SET_ORDER)) {
+            foreach ($matches as $match) {
+                $col = self::normalizeKey($match[1]);
+                $op = strtoupper($match[2]);
+
+                if ($op === 'BETWEEN') {
+                    if (isset($bindings[$bindingIndex])) {
+                        $mapped[$col.'_from'] = self::maskIfSensitive($col, $bindings[$bindingIndex++], $sensitive);
+                    }
+                    if (isset($bindings[$bindingIndex])) {
+                        $mapped[$col.'_to'] = self::maskIfSensitive($col, $bindings[$bindingIndex++], $sensitive);
+                    }
+                } elseif ($op === 'IN') {
+                    // hitung jumlah ? dalam IN (...)
+                    if (preg_match('/\bIN\s*\(([^)]+)\)/i', $match[0], $inMatch)) {
+                        $placeholders = substr_count($inMatch[1], '?');
+                        $values = [];
+                        for ($i = 0; $i < $placeholders; $i++) {
+                            if (isset($bindings[$bindingIndex])) {
+                                $values[] = self::maskIfSensitive($col, $bindings[$bindingIndex++], $sensitive);
+                            }
+                        }
+                        $mapped[$col] = $values;
+                    }
+                } else {
+                    if (isset($bindings[$bindingIndex])) {
+                        $mapped[$col] = self::maskIfSensitive($col, $bindings[$bindingIndex++], $sensitive);
+                    }
+                }
+            }
+        }
+
+        // UPDATE SET col = ?
+        if (preg_match_all('/SET\s+[`"]?(\w+)[`"]?\s*=\s*\?/i', $sql, $m)) {
+            foreach ($m[1] as $col) {
+                $col = self::normalizeKey($col);
+                if (isset($bindings[$bindingIndex])) {
+                    $mapped[$col] = self::maskIfSensitive($col, $bindings[$bindingIndex++], $sensitive);
+                }
+            }
+        }
+
+        // INSERT INTO (col1, col2, ...) VALUES (?, ?, ...)
+        if (preg_match('/\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)/i', $sql, $m)) {
+            $cols = array_map(fn ($c) => self::normalizeKey(str_replace(['`', '"'], '', $c)), explode(',', $m[1]));
+            foreach ($cols as $col) {
+                if (isset($bindings[$bindingIndex])) {
+                    $mapped[$col] = self::maskIfSensitive($col, $bindings[$bindingIndex++], $sensitive);
+                }
             }
         }
 
         return $mapped;
+    }
+
+    protected static function normalizeKey(string $key): string
+    {
+        $key = trim($key, '`" ');
+        $key = strtolower($key);
+
+        return str_replace('-', '_', $key);
+    }
+
+    protected static function maskIfSensitive(string $col, $value, array $sensitive, string $mask = '******')
+    {
+        return in_array($col, $sensitive, true) ? $mask : $value;
+    }
+
+    public static function extractAllInValues(string $sql)
+    {
+        // TODO: handle IN query
+        // $result = [];
+
+        // preg_match_all('/([\w\.]+)\s+in\s*\(([^)]+)\)/i', $sql, $matches, PREG_SET_ORDER);
+
+        // foreach ($matches as $match) {
+        //     $field = $match[1];
+        //     $rawValues = $match[2];
+
+        //     $values = array_map(function ($v) {
+        //         $v = trim($v, " \t\n\r\0\x0B'\""); // trim spasi dan kutip
+
+        //         return is_numeric($v) ? (int) $v : $v;
+        //     }, explode(',', $rawValues));
+
+        //     if (str_contains($field, '.')) {
+        //         $field = substr($field, strrpos($field, '.') + 1);
+        //     }
+
+        //     $result[$field] = $values;
+        // }
+
+        // return $result;
     }
 }

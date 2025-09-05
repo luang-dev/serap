@@ -6,9 +6,9 @@ use Illuminate\Console\Command;
 
 class SerapCommand extends Command
 {
-    public $signature = 'gol';
+    public $signature = 'serap';
 
-    public $description = 'My command';
+    public $description = 'Serap Command';
 
     public function handle(): int
     {
