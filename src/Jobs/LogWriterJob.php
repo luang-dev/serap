@@ -13,7 +13,7 @@ class LogWriterJob implements ShouldQueue
     /**
      * Create a new job instance.
      */
-    public function __construct(public string $eventName, public array $context, public string $level = 'info')
+    public function __construct(public array $logs)
     {
         //
     }
@@ -23,6 +23,8 @@ class LogWriterJob implements ShouldQueue
      */
     public function handle(): void
     {
-        SerapUtils::writeJsonl(eventName: $this->eventName, context: $this->context, level: $this->level);
+        foreach ($this->logs as $log) {
+            SerapUtils::writeJsonl($log['event'], $log['context'], $log['level']);
+        }
     }
 }

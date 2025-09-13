@@ -10,6 +10,9 @@ class SerapCommand extends Command
 
     public $description = 'Serap Command';
 
+    /**
+     * Execute the console command.
+     */
     public function handle(): int
     {
         $this->comment('All done');

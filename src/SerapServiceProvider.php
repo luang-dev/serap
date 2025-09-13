@@ -5,7 +5,7 @@ namespace LuangDev\Serap;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Console\AboutCommand;
 use LuangDev\Serap\Commands\SerapCommand;
-use LuangDev\Serap\Jobs\FlushLogJob;
+use LuangDev\Serap\Jobs\LogSenderJob;
 use LuangDev\Serap\Watchers\WatcherManager;
 use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
@@ -31,7 +31,7 @@ class SerapServiceProvider extends PackageServiceProvider
         ]);
 
         $this->app->afterResolving(abstract: Schedule::class, callback: function (Schedule $schedule): void {
-            $schedule->job(job: new FlushLogJob)->everyFiveSeconds();
+            $schedule->job(job: new LogSenderJob)->everyMinute();
         });
     }
 }

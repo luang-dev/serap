@@ -13,13 +13,23 @@ class SerapUtils
 {
     public const MAX_RESPONSE_LENGTH = 10_000;
 
+    /**
+     * Mask sensitive data in an array.
+     *
+     * This function takes an array of data, an array of sensitive keys, and a mask.
+     * It then iterates over each key-value pair in the data array. If the key is in the
+     * list of sensitive keys, the value is replaced with the mask. If the value is
+     * an array, the function is called recursively on the value. If the value is a string
+     * and the key is 'cookie' or 'set-cookie', the string is passed to maskCookieString.
+     * If the value is a string and the key is in the list of sensitive keys, the value is
+     * replaced with the mask.
+     */
     public static function mask(array $data, array $sensitiveKeys = [], string $mask = '******'): array
     {
         if (count($sensitiveKeys) === 0) {
             $sensitiveKeys = config('serap.sensitive_keys', []);
         }
 
-        // normalisasi daftar key sensitif
         $normalizedKeys = array_map(fn ($k) => self::normalizeKey($k), $sensitiveKeys);
 
         foreach ($data as $key => $value) {
@@ -46,7 +56,11 @@ class SerapUtils
     }
 
     /**
-     * Masking khusus cookie/set-cookie
+     * Mask a cookie string, given a list of normalized sensitive keys and a mask.
+     *
+     * This function takes a cookie string, explodes it into parts, and then iterates
+     * over each part. If the part is a key-value pair and the key is in the
+     * list of sensitive keys, the value is replaced with the mask.
      */
     protected static function maskCookieString(string $cookieString, array $normalizedKeys, string $mask): string
     {
@@ -68,7 +82,7 @@ class SerapUtils
     }
 
     /**
-     * Normalisasi key jadi snake_case lowercase
+     * Normalize a key by trimming and lowercasing it, then replacing all hyphens with underscores.
      */
     protected static function normalizeKey(string $key): string
     {
@@ -78,6 +92,9 @@ class SerapUtils
         return str_replace('-', '_', $key);
     }
 
+    /**
+     * Generate a unique trace ID and store it in the request and context.
+     */
     public static function generateTraceId()
     {
         $traceId = (string) Str::ulid()?->toString();
@@ -89,11 +106,19 @@ class SerapUtils
         return $traceId;
     }
 
+    /**
+     * Return the path to the trace log file.
+     */
     public static function getPath(): string
     {
         return storage_path(path: 'logs/trace.jsonl');
     }
 
+    /**
+     * Detect the response type of the given response.
+     *
+     * Will return one of the following: json, html, text, stream, download, redirect, or unknown.
+     */
     public static function detectResponseType(Response $response): string
     {
         $contentType = $response->headers->get('Content-Type');
@@ -124,6 +149,21 @@ class SerapUtils
         return $contentType;
     }
 
+    /**
+     * Safely truncate content to fit within the max response length.
+     *
+     * This function takes a content string and a type, and returns an array
+     * containing the truncated content and a boolean indicating whether the
+     * content was truncated.
+     *
+     * If the type is 'json', this function will attempt to parse the content as
+     * JSON and truncate the JSON data itself if it exceeds the maximum response
+     * length. If the content is not valid JSON, it will be treated as text and
+     * truncated as such.
+     *
+     * If the type is not 'json', the content will be treated as plain text and
+     * truncated if it exceeds the maximum response length.
+     */
     public static function safeContent(string $content, string $type = 'text')
     {
         $isTruncated = false;
@@ -134,11 +174,6 @@ class SerapUtils
                 $data = mb_substr($content, 0, self::MAX_RESPONSE_LENGTH).'... [TRUNCATED]';
                 $isTruncated = true;
             }
-
-            // return json_encode([
-            //     'is_truncated' => $isTruncated,
-            //     'data' => $data,
-            // ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
             return [
                 'is_truncated' => $isTruncated,
@@ -153,11 +188,6 @@ class SerapUtils
                 $data = mb_substr($content, 0, self::MAX_RESPONSE_LENGTH).'... [TRUNCATED]';
                 $isTruncated = true;
             }
-
-            // return json_encode([
-            //     'is_truncated' => $isTruncated,
-            //     'data' => $data,
-            // ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
             return [
                 'is_truncated' => $isTruncated,
@@ -194,48 +224,79 @@ class SerapUtils
         ];
     }
 
+    /**
+     * Returns the peak memory usage in megabytes.
+     */
     public static function getMemoryUsage(): float
     {
         return memory_get_peak_usage(real_usage: true) / 1024 / 1024;
     }
 
+    /**
+     * Returns the trace ID of the current request.
+     * The trace ID is stored in the context, request attributes, and generated if not found.
+     *
+     * @return string The trace ID of the current request.
+     */
     public static function getTraceId()
     {
         return Context::get('serap_trace_id')
-                    ?? request()?->attributes->get('serap_trace_id')
-                    ?? self::generateTraceId();
+            ?? request()?->attributes->get('serap_trace_id')
+            ?? self::generateTraceId();
     }
 
-    public static function writeJsonl(string $eventName, array $context, string $level = 'info'): void
+    /**
+     * Writes a log entry to a JSON log file.
+     *
+     * This function takes an event name, a context array, and an optional log level.
+     * The log level defaults to 'info'. If the event name is 'exception', the log level is automatically set to 'error'.
+     *
+     * The function generates a log entry with the following format:
+     * {
+     *     "time": string,
+     *     "trace_id": string,
+     *     "event": string,
+     *     "level": string,
+     *     "user": mixed,
+     *     "context": array
+     * }
+     *
+     * The log entry is written to the file at storage_path('logs/serap.jsonl'), with each entry separated by a newline.
+     *
+     * The function uses file locking to ensure that only one process can write to the log file at a time.
+     */
+    public static function writeJsonl(string $event, array $context, string $level = 'info'): void
     {
-        $traceId = SerapUtils::getTraceId();
-        $path = storage_path('logs/serap.jsonl');
+        if ($event == 'exception') {
+            $level = 'error';
+        }
 
+        $log = [
+            'time' => now()->toISOString(),
+            'trace_id' => self::getTraceId(),
+            'event' => $event,
+            'level' => $level,
+            'user' => self::getAuthUser(),
+            'context' => $context,
+        ];
+
+        $path = storage_path('logs/serap.jsonl');
         $file = new SplFileObject($path, 'a');
 
-        // lock exclusive
         if ($file->flock(LOCK_EX)) {
-            $log = [
-                'trace_id' => $traceId,
-                'event' => $eventName,
-                'level' => $level,
-                'time' => now()->toISOString(),
-                'user' => self::getAuthUser(),
-                'context' => $context,
-            ];
-
             $file->fwrite(
-                json_encode(
-                    $log,
-                    JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
-                ).PHP_EOL
+                json_encode($log, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
+                .PHP_EOL
             );
-
-            // release lock
             $file->flock(LOCK_UN);
         }
     }
 
+    /**
+     * Returns the authenticated user in an array format.
+     * The array contains the following keys: id, name, email, username, created_at, first_name, last_name, and avatar.
+     * If the user is not authenticated, the function returns null.
+     */
     public static function getAuthUser(): ?array
     {
         $user = Auth::user();
@@ -250,6 +311,36 @@ class SerapUtils
             'email' => $user->email,
             'username' => $user?->username,
             'created_at' => $user?->created_at,
+            'first_name' => $user?->first_name,
+            'last_name' => $user?->last_name,
+            'avatar' => $user?->avatar ?? $user?->photo ?? $user?->profile_photo_url ?? $user?->profile_picture_url ?? $user?->profile_picture ?? $user?->profileImage ?? $user?->avatar_url ?? $user?->foto,
         ];
+    }
+
+    /**
+     * Reads the log entries from the file at storage_path('logs/serap.jsonl') and returns them as an array.
+     *
+     * Each log entry is an associative array containing the following keys:
+     *     "time": string, the timestamp of the log entry in ISO 8601 format
+     *     "trace_id": string, the trace id of the log entry
+     *     "event": string, the event name of the log entry
+     *     "level": string, the log level of the log entry
+     *     "user": mixed, the authenticated user of the log entry, or null if the user is not authenticated
+     *     "context": array, the context of the log entry
+     *
+     * If the file does not exist, the function returns an empty array.
+     */
+    public static function readJsonl()
+    {
+        $path = storage_path('logs/serap.jsonl');
+
+        if (! file_exists($path)) {
+            return [];
+        }
+
+        $file = new SplFileObject($path);
+        $file->setFlags(SplFileObject::READ_AHEAD | SplFileObject::SKIP_EMPTY | SplFileObject::DROP_NEW_LINE);
+
+        return iterator_to_array($file);
     }
 }

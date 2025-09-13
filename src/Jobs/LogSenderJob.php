@@ -8,31 +8,43 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use SplFileObject;
 
-class FlushLogJob implements ShouldQueue
+class LogSenderJob implements ShouldQueue
 {
     use Queueable;
 
+    /**
+     * Create a new job instance.
+     */
     public function __construct()
     {
         //
     }
 
+    /**
+     * Execute the job.
+     */
     public function handle(): void
     {
         $token = config('serap.api_key');
 
         if (empty($token)) {
+            Log::info('No Serap API key found.');
+
             return;
         }
 
         $logFile = storage_path('logs/serap.jsonl');
 
         if (! file_exists($logFile)) {
+            Log::info('Serap log file not found.');
+
             return;
         }
 
         $lines = file($logFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
         if (empty($lines)) {
+            Log::info('Serap log file is empty.');
+
             return;
         }
 
@@ -40,7 +52,7 @@ class FlushLogJob implements ShouldQueue
         $logs = array_map(fn ($line) => json_decode($line, true), $batch);
 
         try {
-            $response = Http::timeout(5)
+            $response = Http::timeout(10)
                 ->withHeaders([
                     'Authorization' => 'Bearer '.$token,
                     'Content-Type' => 'application/json',
@@ -59,6 +71,8 @@ class FlushLogJob implements ShouldQueue
                 if (! empty($remaining)) {
                     $file->fwrite(implode(PHP_EOL, $remaining).PHP_EOL);
                 }
+
+                Log::info("Batch sent [{$status}]: ".$response->body());
             } else {
                 Log::error("Batch failed [{$status}]: ".$response->body());
             }
