@@ -2,10 +2,10 @@
 
 namespace LuangDev\Serap\Watchers;
 
-use Throwable;
-use SplFileObject;
-use LuangDev\Serap\SerapUtils;
 use Illuminate\Contracts\Debug\ExceptionHandler;
+use LuangDev\Serap\SerapUtils;
+use SplFileObject;
+use Throwable;
 
 class ExceptionWatcher
 {
@@ -44,7 +44,7 @@ class ExceptionWatcher
                             'context' => $context,
                             'from' => 'expWatcher',
                         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
-                        . PHP_EOL
+                        .PHP_EOL
                     );
                     $file->flock(LOCK_UN);
                 }
@@ -96,7 +96,7 @@ class ExceptionWatcher
             'line' => $line,
             'line_preview' => $linePreview,
             'trace' => array_map(
-                fn($t) => [
+                fn ($t) => [
                     'file' => $t['file'] ?? null,
                     'line' => $t['line'] ?? null,
                     'function' => $t['function'] ?? null,

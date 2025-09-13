@@ -53,11 +53,11 @@ class ResponseWatcher
                 'memory' => SerapUtils::getMemoryUsage(),
                 'headers' => SerapUtils::mask($response->headers->all()),
                 'response' => SerapUtils::safeContent($response->getContent(), $type),
-            ]
+            ],
         ];
 
         $queriesCtx = Context::get('serap_queries', []);
-        if (!empty($queriesCtx)) {
+        if (! empty($queriesCtx)) {
             $logs[] = [
                 'time' => now()->toISOString(),
                 'trace_id' => $traceId,
@@ -68,7 +68,7 @@ class ResponseWatcher
             ];
         }
 
-        if (!empty($logs)) {
+        if (! empty($logs)) {
             dispatch(new LogRequestLifecycleJob($logs));
         }
     }
