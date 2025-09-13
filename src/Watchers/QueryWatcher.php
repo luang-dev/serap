@@ -2,9 +2,10 @@
 
 namespace LuangDev\Serap\Watchers;
 
-use Illuminate\Database\Events\QueryExecuted;
-use Illuminate\Support\Facades\Context;
+use LuangDev\Serap\SerapUtils;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Context;
+use Illuminate\Database\Events\QueryExecuted;
 
 class QueryWatcher
 {
@@ -23,6 +24,7 @@ class QueryWatcher
                 'bindings' => $maskedBindings,
                 'duration' => $query->time,
                 'connection' => $query?->connectionName,
+                'time' => now()->toISOString(),
             ];
 
             $queries = Context::get('serap_queries', []);
@@ -38,9 +40,9 @@ class QueryWatcher
 
         foreach ($skipTables as $table) {
             if (
-                stripos($sql, '"'.$table.'"') !== false ||
-                stripos($sql, '`'.$table.'`') !== false ||
-                stripos($sql, ' '.$table.' ') !== false
+                stripos($sql, '"' . $table . '"') !== false ||
+                stripos($sql, '`' . $table . '`') !== false ||
+                stripos($sql, ' ' . $table . ' ') !== false
             ) {
                 return true;
             }
@@ -54,7 +56,7 @@ class QueryWatcher
         $mapped = [];
         $bindingIndex = 0;
 
-        $sensitive = array_map(fn ($k) => self::normalizeKey($k), config('gol.sensitive_keys', ['password']));
+        $sensitive = array_map(fn($k) => self::normalizeKey($k), config('gol.sensitive_keys', ['password']));
 
         // WHERE col = ? / col > ? / etc
         if (preg_match_all('/([`\w\.\"]+)\s*(=|<|>|<=|>=|LIKE|BETWEEN|IN)\s*(\?|[\(])/i', $sql, $matches, PREG_SET_ORDER)) {
@@ -64,10 +66,10 @@ class QueryWatcher
 
                 if ($op === 'BETWEEN') {
                     if (isset($bindings[$bindingIndex])) {
-                        $mapped[$col.'_from'] = self::maskIfSensitive($col, $bindings[$bindingIndex++], $sensitive);
+                        $mapped[$col . '_from'] = self::maskIfSensitive($col, $bindings[$bindingIndex++], $sensitive);
                     }
                     if (isset($bindings[$bindingIndex])) {
-                        $mapped[$col.'_to'] = self::maskIfSensitive($col, $bindings[$bindingIndex++], $sensitive);
+                        $mapped[$col . '_to'] = self::maskIfSensitive($col, $bindings[$bindingIndex++], $sensitive);
                     }
                 } elseif ($op === 'IN') {
                     // hitung jumlah ? dalam IN (...)
@@ -101,7 +103,7 @@ class QueryWatcher
 
         // INSERT INTO (col1, col2, ...) VALUES (?, ?, ...)
         if (preg_match('/\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)/i', $sql, $m)) {
-            $cols = array_map(fn ($c) => self::normalizeKey(str_replace(['`', '"'], '', $c)), explode(',', $m[1]));
+            $cols = array_map(fn($c) => self::normalizeKey(str_replace(['`', '"'], '', $c)), explode(',', $m[1]));
             foreach ($cols as $col) {
                 if (isset($bindings[$bindingIndex])) {
                     $mapped[$col] = self::maskIfSensitive($col, $bindings[$bindingIndex++], $sensitive);

@@ -12,17 +12,11 @@ class FlushLogJob implements ShouldQueue
 {
     use Queueable;
 
-    /**
-     * Create a new job instance.
-     */
     public function __construct()
     {
         //
     }
 
-    /**
-     * Execute the job.
-     */
     public function handle(): void
     {
         $token = config('serap.api_key');
@@ -47,22 +41,28 @@ class FlushLogJob implements ShouldQueue
 
         try {
             $response = Http::timeout(5)
-                ->withHeaders(headers: [
+                ->withHeaders([
                     'Authorization' => 'Bearer '.$token,
+                    'Content-Type' => 'application/json',
+                    'Accept' => 'application/json',
                 ])
                 ->post(config('serap.endpoint').'/api/ingest', [
                     'logs' => $logs,
                 ]);
 
-            if ($response->successful()) {
-                $remaining = array_slice($lines, 100);
+            $status = $response->status();
 
-                $file = new SplFileObject(filename: $logFile, mode: 'w');
-                $file->fwrite(implode(PHP_EOL, $remaining));
+            if ($status === 200 || $status === 201) {
+                $remaining = array_slice($lines, 100);
+                $file = new SplFileObject($logFile, 'w');
+
+                if (! empty($remaining)) {
+                    $file->fwrite(implode(PHP_EOL, $remaining).PHP_EOL);
+                }
             } else {
-                Log::error('Batch failed: '.$response->body());
+                Log::error("Batch failed [{$status}]: ".$response->body());
             }
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             Log::error('Batch error: '.$e->getMessage());
         }
     }

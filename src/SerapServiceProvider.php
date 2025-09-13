@@ -31,7 +31,7 @@ class SerapServiceProvider extends PackageServiceProvider
         ]);
 
         $this->app->afterResolving(abstract: Schedule::class, callback: function (Schedule $schedule): void {
-            $schedule->job(job: new FlushLogJob)->everyMinute();
+            $schedule->job(job: new FlushLogJob)->everyFiveSeconds();
         });
     }
 }

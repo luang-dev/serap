@@ -78,9 +78,15 @@ class SerapUtils
         return str_replace('-', '_', $key);
     }
 
-    public static function generateTraceId(): string
+    public static function generateTraceId()
     {
-        return (string) Str::ulid();
+        $traceId = (string) Str::ulid()?->toString();
+
+        Context::add('serap_trace_id', $traceId);
+
+        request()?->attributes->set('serap_trace_id', $traceId);
+
+        return $traceId;
     }
 
     public static function getPath(): string
@@ -195,7 +201,9 @@ class SerapUtils
 
     public static function getTraceId()
     {
-        return Context::get(key: 'serap_trace_id');
+        return Context::get('serap_trace_id')
+                    ?? request()?->attributes->get('serap_trace_id')
+                    ?? self::generateTraceId();
     }
 
     public static function writeJsonl(string $eventName, array $context, string $level = 'info'): void

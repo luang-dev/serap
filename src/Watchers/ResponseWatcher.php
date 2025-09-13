@@ -4,7 +4,7 @@ namespace LuangDev\Serap\Watchers;
 
 use Illuminate\Foundation\Http\Events\RequestHandled;
 use Illuminate\Support\Facades\Context;
-use LuangDev\Serap\Jobs\LogWriterJob;
+use LuangDev\Serap\Jobs\LogRequestLifecycleJob;
 use LuangDev\Serap\SerapUtils;
 
 class ResponseWatcher
@@ -21,27 +21,55 @@ class ResponseWatcher
             $response->headers->set('Serap-Trace-Id', (string) $traceId);
         }
 
-        $duration = $start ? round((microtime(as_float: true) - $start) * 1000, 2) : null;
+        $duration = $start ? round((microtime(true) - $start) * 1000, 2) : null;
         $type = SerapUtils::detectResponseType($response);
 
-        $context = [
-            'status' => $response->getStatusCode(),
-            'duration_ms' => $duration,
-            'type' => $type,
-            'memory' => SerapUtils::getMemoryUsage(),
-            'headers' => SerapUtils::mask($response->headers->all()),
-            'response' => SerapUtils::safeContent($response->getContent(), $type),
+        $logs = [];
+
+        // request
+        $requestCtx = Context::get('serap_request_context');
+        if ($requestCtx) {
+            $logs[] = [
+                'trace_id' => $traceId,
+                'event' => 'request',
+                'level' => $response->getStatusCode() >= 500 ? 'error' : 'info',
+                'time' => now()->toISOString(),
+                'user' => SerapUtils::getAuthUser(),
+                'context' => $requestCtx,
+            ];
+        }
+
+        // response
+        $logs[] = [
+            'time' => now()->toISOString(),
+            'trace_id' => $traceId,
+            'event' => 'response',
+            'level' => $response->getStatusCode() >= 500 ? 'error' : 'info',
+            'user' => SerapUtils::getAuthUser(),
+            'context' => [
+                'level' => $response->getStatusCode() >= 500 ? 'error' : 'info',
+                'duration_ms' => $duration,
+                'type' => $type,
+                'memory' => SerapUtils::getMemoryUsage(),
+                'headers' => SerapUtils::mask($response->headers->all()),
+                'response' => SerapUtils::safeContent($response->getContent(), $type),
+            ]
         ];
 
-        dispatch(job: new LogWriterJob(eventName: 'response', context: $context));
+        $queriesCtx = Context::get('serap_queries', []);
+        if (!empty($queriesCtx)) {
+            $logs[] = [
+                'time' => now()->toISOString(),
+                'trace_id' => $traceId,
+                'event' => 'query',
+                'level' => $response->getStatusCode() >= 500 ? 'error' : 'info',
+                'user' => SerapUtils::getAuthUser(),
+                'context' => $queriesCtx,
+            ];
+        }
 
-        $queries = Context::get('serap_queries', []);
-
-        if (! empty($queries)) {
-            // foreach ($queries as $query) {
-            //     dispatch(job: new LogWriterJob(eventName: 'query', context: $query));
-            // }
-            dispatch(job: new LogWriterJob(eventName: 'query', context: $queries));
+        if (!empty($logs)) {
+            dispatch(new LogRequestLifecycleJob($logs));
         }
     }
 }
