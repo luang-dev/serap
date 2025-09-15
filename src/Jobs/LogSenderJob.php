@@ -62,6 +62,10 @@ class LogSenderJob implements ShouldQueue
                     'logs' => $logs,
                 ]);
 
+            // put log into serap-payload.jsonl
+            $file = new SplFileObject(storage_path('logs/serap-payload.jsonl'), 'w');
+            $file->fwrite(json_encode($logs).PHP_EOL);
+
             $status = $response->status();
 
             if ($status === 200 || $status === 201) {

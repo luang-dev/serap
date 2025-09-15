@@ -55,6 +55,7 @@ class ResponseWatcher
                     'params' => SerapUtils::mask($request->query->all()),
                     'headers' => SerapUtils::mask($request->headers->all()),
                     'payload' => SerapUtils::mask($request->all()),
+                    'status' => $response->getStatusCode(),
                 ],
             ];
         }
@@ -64,13 +65,13 @@ class ResponseWatcher
             file_put_contents(storage_path('logs/serap-exceptions.log'), json_encode($exceptionsCtx), FILE_APPEND);
             if (count($exceptionsCtx) > 1) {
                 // slice and only keep the last exception
-                $exceptionsCtx = array_slice($exceptionsCtx, -1);
+                $exceptionsCtx = array_values(array_slice($exceptionsCtx, -1));
             }
 
             $logs[] = [
                 'event' => 'exception',
                 'level' => self::setLevelStatusCode($response->getStatusCode()),
-                'context' => $exceptionsCtx,
+                'context' => array_values($exceptionsCtx),
             ];
         }
 
@@ -89,6 +90,7 @@ class ResponseWatcher
             'level' => self::setLevelStatusCode($response->getStatusCode()),
             'context' => [
                 'level' => self::setLevelStatusCode($response->getStatusCode()),
+                'status' => $response->getStatusCode(),
                 'duration_ms' => $duration,
                 'type' => $type,
                 'time' => now()->toISOString(),
