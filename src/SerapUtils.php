@@ -2,12 +2,12 @@
 
 namespace LuangDev\Serap;
 
+use SplFileObject;
+use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Context;
-use Illuminate\Support\Str;
-use SplFileObject;
-use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpFoundation\RedirectResponse;
 
 class SerapUtils
 {
@@ -265,7 +265,7 @@ class SerapUtils
      *
      * The function uses file locking to ensure that only one process can write to the log file at a time.
      */
-    public static function writeJsonl(string $event, array $context, string $level = 'info'): void
+    public static function writeJsonl(string $event, array $context, ?array $auth, string $level = 'info'): void
     {
         if ($event == 'exception') {
             $level = 'error';
@@ -276,7 +276,8 @@ class SerapUtils
             'trace_id' => self::getTraceId(),
             'event' => $event,
             'level' => $level,
-            'user' => self::getAuthUser(),
+            // 'user' => self::getAuthUser(),
+            'auth' => $auth ?? $context['auth'] ?? $context['user'] ?? self::getAuthUser() ?? null,
             'context' => $context,
         ];
 
@@ -310,7 +311,7 @@ class SerapUtils
             'name' => $user->name,
             'email' => $user->email,
             'username' => $user?->username,
-            'created_at' => $user?->created_at,
+            'created_at' => $user?->created_at?->toDateTimeString(),
             'first_name' => $user?->first_name,
             'last_name' => $user?->last_name,
             'avatar' => $user?->avatar ?? $user?->photo ?? $user?->profile_photo_url ?? $user?->profile_picture_url ?? $user?->profile_picture ?? $user?->profileImage ?? $user?->avatar_url ?? $user?->foto,

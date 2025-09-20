@@ -38,6 +38,7 @@ class ResponseWatcher
             $logs[] = [
                 'event' => 'request',
                 'level' => self::setLevelStatusCode($response->getStatusCode()),
+                'auth' => SerapUtils::getAuthUser(),
                 'context' => $requestCtx,
             ];
         } else {
@@ -45,6 +46,7 @@ class ResponseWatcher
             $logs[] = [
                 'event' => 'request',
                 'level' => self::setLevelStatusCode($response->getStatusCode()),
+                'auth' => SerapUtils::getAuthUser(),
                 'context' => [
                     'uri' => str_replace($request->root(), '', $request->fullUrl()) ?: '/',
                     'method' => $request->method(),
@@ -71,6 +73,7 @@ class ResponseWatcher
             $logs[] = [
                 'event' => 'exception',
                 'level' => self::setLevelStatusCode($response->getStatusCode()),
+                'auth' => SerapUtils::getAuthUser(),
                 'context' => array_values($exceptionsCtx),
             ];
         }
@@ -80,6 +83,7 @@ class ResponseWatcher
             $logs[] = [
                 'event' => 'query',
                 'level' => self::setLevelStatusCode($response->getStatusCode()),
+                'auth' => SerapUtils::getAuthUser(),
                 'context' => $queriesCtx,
             ];
         }
@@ -88,6 +92,7 @@ class ResponseWatcher
         $logs[] = [
             'event' => 'response',
             'level' => self::setLevelStatusCode($response->getStatusCode()),
+            'auth' => SerapUtils::getAuthUser(),
             'context' => [
                 'level' => self::setLevelStatusCode($response->getStatusCode()),
                 'status' => $response->getStatusCode(),

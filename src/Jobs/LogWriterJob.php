@@ -24,7 +24,7 @@ class LogWriterJob implements ShouldQueue
     public function handle(): void
     {
         foreach ($this->logs as $log) {
-            SerapUtils::writeJsonl($log['event'], $log['context'], $log['level']);
+            SerapUtils::writeJsonl($log['event'], $log['context'], $log['auth'] ?? $log['user'], $log['level']);
         }
     }
 }
