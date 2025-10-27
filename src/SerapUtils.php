@@ -4,6 +4,7 @@ namespace LuangDev\Serap;
 
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Context;
+use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\Str;
 use SplFileObject;
 use Symfony\Component\HttpFoundation\RedirectResponse;
@@ -267,11 +268,21 @@ class SerapUtils
      */
     public static function writeJsonl(string $event, array $context, ?array $auth, string $level = 'info'): void
     {
+        $log = self::prepareLog($event, $context, $auth, $level);
+
+        self::appendLogsToJsonl([$log]);
+    }
+
+    /**
+     * Prepare a log payload with the default metadata.
+     */
+    public static function prepareLog(string $event, array $context, ?array $auth, string $level = 'info'): array
+    {
         if ($event == 'exception') {
             $level = 'error';
         }
 
-        $log = [
+        return [
             'time' => now()->toISOString(),
             'trace_id' => self::getTraceId(),
             'event' => $event,
@@ -280,17 +291,72 @@ class SerapUtils
             'auth' => $auth ?? $context['auth'] ?? $context['user'] ?? self::getAuthUser() ?? null,
             'context' => $context,
         ];
+    }
+
+    /**
+     * Dispatch the logs to the configured ingest driver.
+     */
+    public static function ingestLogs(array $logs): void
+    {
+        if (empty($logs)) {
+            return;
+        }
+
+        $driver = config('serap.ingest.driver', 'file');
+
+        if ($driver === 'redis') {
+            self::pushLogsToRedis($logs);
+
+            return;
+        }
+
+        self::appendLogsToJsonl($logs);
+    }
+
+    /**
+     * Append the provided logs to the JSONL storage.
+     */
+    public static function appendLogsToJsonl(array $logs): void
+    {
+        if (empty($logs)) {
+            return;
+        }
 
         $path = storage_path('logs/serap.jsonl');
         $file = new SplFileObject($path, 'a');
 
         if ($file->flock(LOCK_EX)) {
-            $file->fwrite(
-                json_encode($log, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
-                .PHP_EOL
-            );
+            foreach ($logs as $log) {
+                $file->fwrite(
+                    json_encode($log, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
+                    .PHP_EOL
+                );
+            }
+
             $file->flock(LOCK_UN);
         }
+    }
+
+    /**
+     * Push the provided logs into the configured Redis list.
+     */
+    public static function pushLogsToRedis(array $logs): void
+    {
+        if (empty($logs)) {
+            return;
+        }
+
+        $config = config('serap.ingest.redis', []);
+        $connection = $config['connection'] ?? 'default';
+        $key = $config['key'] ?? 'serap:logs';
+
+        $redis = Redis::connection($connection);
+
+        $redis->pipeline(function ($pipe) use ($logs, $key) {
+            foreach ($logs as $log) {
+                $pipe->rpush($key, json_encode($log, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+            }
+        });
     }
 
     /**

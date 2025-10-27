@@ -3,6 +3,14 @@
 return [
     'endpoint' => env('SERAP_INGEST_ENDPOINT', 'https://github.com/luang-dev/serap'),
     'api_key' => env('SERAP_API_KEY', null),
+    'ingest' => [
+        'driver' => env('SERAP_INGEST_DRIVER', 'file'),
+        'batch_size' => env('SERAP_INGEST_BATCH_SIZE', 100),
+        'redis' => [
+            'connection' => env('SERAP_REDIS_CONNECTION', 'default'),
+            'key' => env('SERAP_REDIS_KEY', 'serap:logs'),
+        ],
+    ],
     'sensitive_keys' => [
         'api_key',
         'password',
