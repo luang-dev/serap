@@ -6,9 +6,7 @@ use Illuminate\Support\Facades\Redis;
 
 class RedisIngestQueueDriver implements IngestQueueDriver
 {
-    public function __construct(protected string $key)
-    {
-    }
+    public function __construct(protected string $key) {}
 
     public function push(array $log): void
     {
