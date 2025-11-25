@@ -10,8 +10,7 @@ class IngestHttpClient
     public function __construct(
         protected readonly string $endpoint,
         protected readonly string $token,
-    ) {
-    }
+    ) {}
 
     public function send(array $logs): bool
     {

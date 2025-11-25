@@ -5,8 +5,8 @@ namespace LuangDev\Serap\Jobs;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
-use LuangDev\Serap\Ingest\IngestQueue;
 use LuangDev\Serap\Ingest\IngestHttpClient;
+use LuangDev\Serap\Ingest\IngestQueue;
 
 class LogSenderJob implements ShouldQueue
 {
