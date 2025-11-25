@@ -6,7 +6,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use SplFileObject;
+use LuangDev\Serap\Ingest\IngestQueue;
 
 class LogSenderJob implements ShouldQueue
 {
@@ -33,23 +33,14 @@ class LogSenderJob implements ShouldQueue
             return;
         }
 
-        $logFile = storage_path('logs/serap.jsonl');
+        $batchSize = (int) config('serap.ingest.batch_size', 100);
+        $logs = IngestQueue::pullBatch($batchSize);
 
-        if (! file_exists($logFile)) {
-            Log::info('Serap log file not found.');
-
-            return;
-        }
-
-        $lines = file($logFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-        if (empty($lines)) {
-            Log::info('Serap log file is empty.');
+        if (empty($logs)) {
+            Log::info('No Serap logs to send.');
 
             return;
         }
-
-        $batch = array_slice($lines, 0, 100);
-        $logs = array_map(fn ($line) => json_decode($line, true), $batch);
 
         try {
             $response = Http::timeout(10)
@@ -63,24 +54,19 @@ class LogSenderJob implements ShouldQueue
                 ]);
 
             // put log into serap-payload.jsonl
-            $file = new SplFileObject(storage_path('logs/serap-payload.jsonl'), 'w');
-            $file->fwrite(json_encode($logs).PHP_EOL);
+            $payloadFile = storage_path('logs/serap-payload.jsonl');
+            file_put_contents($payloadFile, json_encode($logs).PHP_EOL, flags: LOCK_EX);
 
             $status = $response->status();
 
             if ($status === 200 || $status === 201) {
-                $remaining = array_slice($lines, 100);
-                $file = new SplFileObject($logFile, 'w');
-
-                if (! empty($remaining)) {
-                    $file->fwrite(implode(PHP_EOL, $remaining).PHP_EOL);
-                }
-
                 Log::info("Batch sent [{$status}]: ".$response->body());
             } else {
+                IngestQueue::pushBatch($logs);
                 Log::error("Batch failed [{$status}]: ".$response->body());
             }
         } catch (\Throwable $e) {
+            IngestQueue::pushBatch($logs);
             Log::error('Batch error: '.$e->getMessage());
         }
     }
