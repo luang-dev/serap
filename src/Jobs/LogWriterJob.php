@@ -4,7 +4,7 @@ namespace LuangDev\Serap\Jobs;
 
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
-use LuangDev\Serap\SerapUtils;
+use LuangDev\Serap\Ingest\IngestQueue;
 
 class LogWriterJob implements ShouldQueue
 {
@@ -23,8 +23,6 @@ class LogWriterJob implements ShouldQueue
      */
     public function handle(): void
     {
-        foreach ($this->logs as $log) {
-            SerapUtils::writeJsonl($log['event'], $log['context'], $log['auth'] ?? $log['user'], $log['level']);
-        }
+        IngestQueue::pushBatch($this->logs);
     }
 }

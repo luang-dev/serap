@@ -12,5 +12,10 @@ class WatcherManager
         QueryWatcher::handle();
         ExceptionWatcher::handle();
         RequestResponseManager::register();
+        JobWatcher::handle();
+        CommandWatcher::handle();
+        SchedulerWatcher::handle();
+        MailWatcher::handle();
+        NotificationWatcher::handle();
     }
 }
