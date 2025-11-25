@@ -4,8 +4,8 @@ namespace LuangDev\Serap;
 
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Context;
-use LuangDev\Serap\Ingest\IngestQueue;
 use Illuminate\Support\Str;
+use LuangDev\Serap\Ingest\IngestQueue;
 use SplFileObject;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Response;
@@ -13,6 +13,7 @@ use Symfony\Component\HttpFoundation\Response;
 class SerapUtils
 {
     public const MAX_RESPONSE_LENGTH = 10_000;
+
     protected static int $sequence = 0;
 
     /**
