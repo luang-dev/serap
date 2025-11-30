@@ -3,6 +3,24 @@
 return [
     'endpoint' => env('SERAP_INGEST_ENDPOINT', 'https://github.com/luang-dev/serap'),
     'api_key' => env('SERAP_API_KEY', null),
+    'ingest' => [
+        'driver' => env('SERAP_INGEST_DRIVER', 'file'),
+        'batch_size' => env('SERAP_INGEST_BATCH', 100),
+        'min_batch' => env('SERAP_INGEST_MIN_BATCH', 20),
+        'max_batch' => env('SERAP_INGEST_MAX_BATCH', 500),
+        'latency_target_ms' => env('SERAP_INGEST_LATENCY_TARGET', 750),
+        'latency_ceiling_ms' => env('SERAP_INGEST_LATENCY_CEILING', 2000),
+        'compress_threshold' => env('SERAP_INGEST_COMPRESS_THRESHOLD', 65536),
+        'retention_days' => env('SERAP_INGEST_RETENTION_DAYS', 7),
+        'priorities' => explode(',', env('SERAP_INGEST_PRIORITIES', 'high,normal,low')),
+        'fallback_path' => env('SERAP_INGEST_FALLBACK', storage_path('logs/serap-fallback.jsonl')),
+        'file' => [
+            'path' => env('SERAP_INGEST_FILE', storage_path('logs/serap.jsonl')),
+        ],
+        'redis' => [
+            'key' => env('SERAP_INGEST_KEY', 'serap:ingest'),
+        ],
+    ],
     'sensitive_keys' => [
         'api_key',
         'password',
