@@ -4,6 +4,7 @@ namespace LuangDev\Serap;
 
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Context;
+use LuangDev\Serap\Ingest\IngestQueue;
 use Illuminate\Support\Str;
 use SplFileObject;
 use Symfony\Component\HttpFoundation\RedirectResponse;
@@ -12,6 +13,7 @@ use Symfony\Component\HttpFoundation\Response;
 class SerapUtils
 {
     public const MAX_RESPONSE_LENGTH = 10_000;
+    protected static int $sequence = 0;
 
     /**
      * Mask sensitive data in an array.
@@ -273,24 +275,19 @@ class SerapUtils
 
         $log = [
             'time' => now()->toISOString(),
+            'occurred_at' => now()->toISOString(),
+            'event_id' => (string) Str::uuid(),
+            'sequence' => ++self::$sequence,
             'trace_id' => self::getTraceId(),
             'event' => $event,
             'level' => $level,
+            'priority' => $level === 'error' ? 'high' : 'normal',
             // 'user' => self::getAuthUser(),
             'auth' => $auth ?? $context['auth'] ?? $context['user'] ?? self::getAuthUser() ?? null,
             'context' => $context,
         ];
 
-        $path = storage_path('logs/serap.jsonl');
-        $file = new SplFileObject($path, 'a');
-
-        if ($file->flock(LOCK_EX)) {
-            $file->fwrite(
-                json_encode($log, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
-                .PHP_EOL
-            );
-            $file->flock(LOCK_UN);
-        }
+        IngestQueue::push($log);
     }
 
     /**
@@ -333,7 +330,7 @@ class SerapUtils
      */
     public static function readJsonl()
     {
-        $path = storage_path('logs/serap.jsonl');
+        $path = config('serap.ingest.file.path', storage_path('logs/serap.jsonl'));
 
         if (! file_exists($path)) {
             return [];
