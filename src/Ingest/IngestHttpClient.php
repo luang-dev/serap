@@ -14,8 +14,7 @@ class IngestHttpClient
         protected readonly int $timeoutSeconds = 10,
         protected readonly int $retryTimes = 2,
         protected readonly int $retryDelayMs = 500,
-    ) {
-    }
+    ) {}
 
     /**
      * @return array{success: bool, latency_ms: float, status: int|null, checksum: string|null, compressed: bool}
