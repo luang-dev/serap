@@ -21,7 +21,7 @@ class QueryWatcher
             $context = [
                 'sql' => $query->sql,
                 'bindings' => $maskedBindings,
-                'duration' => $query->time,
+                'duration_ms' => $query->time,
                 'connection' => $query?->connectionName,
                 'time' => now()->toISOString(),
             ];

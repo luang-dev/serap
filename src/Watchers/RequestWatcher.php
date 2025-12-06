@@ -22,6 +22,12 @@ class RequestWatcher
         $request->attributes->set('serap_trace_id', $traceId);
         $request->attributes->set('serap_start_time', microtime(true));
 
+        $rawRequestPayload = $request->all();
+        $requestPayloadSize = SerapUtils::getPayloadSizeBytes(
+            is_string($rawRequestPayload) ? $rawRequestPayload : null,
+            $request->headers->get('content-length')
+        );
+
         $context = [
             'time' => now()->toISOString(),
             'uri' => str_replace($request->root(), '', $request->fullUrl()) ?: '/',
@@ -30,9 +36,10 @@ class RequestWatcher
             'middleware' => array_values($event->route?->gatherMiddleware() ?? []),
             'session' => SerapUtils::mask($request->hasSession() ? $request->session()->all() : []),
             'memory' => SerapUtils::getMemoryUsage(),
-            'params' => SerapUtils::mask($request->query->all()),
             'headers' => SerapUtils::mask($request->headers->all()),
             'payload' => SerapUtils::mask($request->all()),
+            'payload_type' => $request->isJson() ? 'json' : 'form',
+            'payload_size_bytes' => $requestPayloadSize,
         ];
 
         Context::add('serap_request_context', $context);

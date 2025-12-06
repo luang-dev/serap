@@ -23,12 +23,20 @@ class ResponseWatcher
         $traceId = $request->attributes->get('serap_trace_id');
         $start = $request->attributes->get('serap_start_time');
 
+        $rawRequestPayload = $request->all();
+        $requestPayloadSize = SerapUtils::getPayloadSizeBytes(is_string($rawRequestPayload) ? $rawRequestPayload : null, $request->headers->get('content-length'));
+
+        $rawResponseContent = $response->getContent();
+        $responseContent = is_string($rawResponseContent) ? $rawResponseContent : '';
+        $responseSizeBytes = SerapUtils::getPayloadSizeBytes($responseContent, $response->headers->get('Content-Length'));
+        $type = SerapUtils::detectResponseType($response);
+        $getResponseContent = SerapUtils::safeContent($responseContent, $type);
+
         if ($traceId) {
             $response->headers->set('Serap-Trace-Id', (string) $traceId);
         }
 
         $duration = $start ? round((microtime(true) - $start) * 1000, 2) : null;
-        $type = SerapUtils::detectResponseType($response);
 
         $logs = [];
 
@@ -39,7 +47,15 @@ class ResponseWatcher
                 'event' => 'request',
                 'level' => self::setLevelStatusCode($response->getStatusCode()),
                 'auth' => SerapUtils::getAuthUser(),
-                'context' => $requestCtx,
+                'sequence' => SerapUtils::nextSequence(),
+                'context' => [
+                    ...$requestCtx,
+                    'response_size_bytes' => $responseSizeBytes,
+                    'is_truncated' => $getResponseContent['is_truncated'],
+                    'duration_ms' => $duration,
+                    'response_type' => $type,
+                    'status' => $response->getStatusCode(),
+                ],
             ];
         } else {
             // RouteMatched event not triggered because something went wrong in routing/bootstrap
@@ -47,6 +63,7 @@ class ResponseWatcher
                 'event' => 'request',
                 'level' => self::setLevelStatusCode($response->getStatusCode()),
                 'auth' => SerapUtils::getAuthUser(),
+                'sequence' => SerapUtils::nextSequence(),
                 'context' => [
                     'uri' => str_replace($request->root(), '', $request->fullUrl()) ?: '/',
                     'method' => $request->method(),
@@ -54,10 +71,14 @@ class ResponseWatcher
                     'middleware' => array_values($request?->route?->gatherMiddleware() ?? []),
                     'session' => SerapUtils::mask($request->hasSession() ? $request->session()->all() : []),
                     'memory' => SerapUtils::getMemoryUsage(),
-                    'params' => SerapUtils::mask($request->query->all()),
                     'headers' => SerapUtils::mask($request->headers->all()),
                     'payload' => SerapUtils::mask($request->all()),
                     'status' => $response->getStatusCode(),
+                    'payload_size_bytes' => $requestPayloadSize,
+                    'response_size_bytes' => $responseSizeBytes,
+                    'is_truncated' => $getResponseContent['is_truncated'],
+                    'duration_ms' => $duration,
+                    'type' => $type,
                 ],
             ];
         }
@@ -74,6 +95,8 @@ class ResponseWatcher
                 'event' => 'exception',
                 'level' => self::setLevelStatusCode($response->getStatusCode()),
                 'auth' => SerapUtils::getAuthUser(),
+                'sequence' => SerapUtils::nextSequence(),
+
                 'context' => array_values($exceptionsCtx),
             ];
         }
@@ -84,6 +107,7 @@ class ResponseWatcher
                 'event' => 'query',
                 'level' => self::setLevelStatusCode($response->getStatusCode()),
                 'auth' => SerapUtils::getAuthUser(),
+                'sequence' => SerapUtils::nextSequence(),
                 'context' => $queriesCtx,
             ];
         }
@@ -93,6 +117,7 @@ class ResponseWatcher
             'event' => 'response',
             'level' => self::setLevelStatusCode($response->getStatusCode()),
             'auth' => SerapUtils::getAuthUser(),
+            'sequence' => SerapUtils::nextSequence(),
             'context' => [
                 'level' => self::setLevelStatusCode($response->getStatusCode()),
                 'status' => $response->getStatusCode(),
@@ -101,7 +126,9 @@ class ResponseWatcher
                 'time' => now()->toISOString(),
                 'memory' => SerapUtils::getMemoryUsage(),
                 'headers' => SerapUtils::mask($response->headers->all()),
-                'response' => SerapUtils::safeContent($response->getContent(), $type),
+                'response_size_bytes' => $responseSizeBytes,
+                'is_truncated' => $getResponseContent['is_truncated'],
+                'response' => $getResponseContent['data'],
             ],
         ];
 

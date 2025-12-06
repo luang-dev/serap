@@ -10,12 +10,12 @@ class WatcherManager
     public static function register(): void
     {
         QueryWatcher::handle();
-        ExceptionWatcher::handle();
-        RequestResponseManager::register();
-        JobWatcher::handle();
+        // ExceptionWatcher::handle();
+        // RequestResponseManager::register();
+        // JobWatcher::handle();
         CommandWatcher::handle();
-        SchedulerWatcher::handle();
-        MailWatcher::handle();
-        NotificationWatcher::handle();
+        // SchedulerWatcher::handle();
+        // MailWatcher::handle();
+        // NotificationWatcher::handle();
     }
 }

@@ -276,19 +276,36 @@ class SerapUtils
 
         $log = [
             'time' => now()->toISOString(),
-            'occurred_at' => now()->toISOString(),
-            'event_id' => (string) Str::uuid(),
-            'sequence' => ++self::$sequence,
+            // 'occurred_at' => now()->toISOString(),
+            // 'event_id' => (string) Str::ulid(),
+            'sequence' => self::nextSequence(),
             'trace_id' => self::getTraceId(),
             'event' => $event,
             'level' => $level,
             'priority' => $level === 'error' ? 'high' : 'normal',
-            // 'user' => self::getAuthUser(),
             'auth' => $auth ?? $context['auth'] ?? $context['user'] ?? self::getAuthUser() ?? null,
             'context' => $context,
         ];
 
+        $path = storage_path('logs/serap.jsonl');
+        $file = new SplFileObject($path, 'a');
         IngestQueue::push($log);
+
+        if ($file->flock(LOCK_EX)) {
+            $file->fwrite(
+                json_encode($log, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
+                .PHP_EOL
+            );
+            $file->flock(LOCK_UN);
+        }
+    }
+
+    /**
+     * Returns the next global sequence number for emitted logs.
+     */
+    public static function nextSequence(): int
+    {
+        return ++self::$sequence;
     }
 
     /**
@@ -341,5 +358,21 @@ class SerapUtils
         $file->setFlags(SplFileObject::READ_AHEAD | SplFileObject::SKIP_EMPTY | SplFileObject::DROP_NEW_LINE);
 
         return iterator_to_array($file);
+    }
+
+    /**
+     * Return the content size in bytes, preferring an explicit length header when available.
+     */
+    public static function getPayloadSizeBytes(?string $content, ?string $lengthHeader = null): int
+    {
+        if (is_numeric($lengthHeader)) {
+            return (int) $lengthHeader;
+        }
+
+        if ($content === null) {
+            return 0;
+        }
+
+        return mb_strlen($content, '8bit');
     }
 }

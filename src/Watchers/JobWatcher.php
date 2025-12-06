@@ -32,7 +32,7 @@ class JobWatcher
         $context = [
             'status' => $status,
             'name' => method_exists($job, 'resolveName') ? $job->resolveName() : null,
-            'display_name' => method_exists($job, 'displayName') ? $job->displayName() : null,
+            'display_name' => method_exists($job, 'displayName') ? $job?->displayName() : null,
             'queue' => method_exists($job, 'getQueue') ? $job->getQueue() : null,
             'connection' => $event->connectionName ?? null,
             'attempts' => method_exists($job, 'attempts') ? $job->attempts() : null,

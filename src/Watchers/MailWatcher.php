@@ -2,7 +2,6 @@
 
 namespace LuangDev\Serap\Watchers;
 
-use Illuminate\Mail\Events\MessageFailed;
 use Illuminate\Mail\Events\MessageSending;
 use Illuminate\Mail\Events\MessageSent;
 use Illuminate\Support\Facades\Event;
@@ -12,22 +11,30 @@ class MailWatcher
 {
     public static function handle(): void
     {
-        Event::listen(MessageSending::class, function (MessageSending $event): void {
-            self::log(status: 'sending', event: $event);
-        });
+        if (class_exists(MessageSending::class)) {
+            Event::listen(MessageSending::class, function (MessageSending $event): void {
+                self::log(status: 'sending', event: $event);
+            });
+        }
 
-        Event::listen(MessageSent::class, function (MessageSent $event): void {
-            self::log(status: 'sent', event: $event);
-        });
+        if (class_exists(MessageSent::class)) {
+            Event::listen(MessageSent::class, function (MessageSent $event): void {
+                self::log(status: 'sent', event: $event);
+            });
+        }
 
-        Event::listen(MessageFailed::class, function (MessageFailed $event): void {
-            self::log(status: 'failed', event: $event);
-        });
+        $messageFailedEvent = 'Illuminate\\Mail\\Events\\MessageFailed';
+
+        if (class_exists($messageFailedEvent)) {
+            Event::listen($messageFailedEvent, function (object $event): void {
+                self::log(status: 'failed', event: $event);
+            });
+        }
     }
 
-    protected static function log(string $status, MessageSending|MessageSent|MessageFailed $event): void
+    protected static function log(string $status, object $event): void
     {
-        $message = $event->message;
+        $message = $event->message ?? null;
 
         $context = [
             'status' => $status,
@@ -38,14 +45,14 @@ class MailWatcher
             'time' => now()->toISOString(),
         ];
 
-        if ($event instanceof MessageFailed && $event->exception) {
+        if ($status === 'failed' && isset($event->exception)) {
             $context['exception'] = [
                 'message' => $event->exception->getMessage(),
                 'class' => get_class($event->exception),
             ];
         }
 
-        $level = $event instanceof MessageFailed ? 'error' : 'info';
+        $level = $status === 'failed' ? 'error' : 'info';
 
         SerapUtils::writeJsonl(
             event: 'mail',
