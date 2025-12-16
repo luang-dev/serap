@@ -2,18 +2,21 @@
 
 namespace LuangDev\Serap;
 
-use Illuminate\Console\Scheduling\Schedule;
-use Illuminate\Foundation\Console\AboutCommand;
-use LuangDev\Serap\Commands\SerapCommand;
-use LuangDev\Serap\Jobs\LogSenderJob;
-use LuangDev\Serap\Watchers\WatcherManager;
+use Illuminate\Support\Facades\Event;
 use Spatie\LaravelPackageTools\Package;
+use LuangDev\Serap\Commands\SerapCommand;
+use Illuminate\Routing\Events\RouteMatched;
+use Illuminate\Foundation\Console\AboutCommand;
+use Illuminate\Routing\Events\PreparingResponse;
+use Illuminate\Routing\Events\ResponsePrepared;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
 
 class SerapServiceProvider extends PackageServiceProvider
 {
     public function configurePackage(Package $package): void
     {
+        info('app register: ' . (defined('LARAVEL_START') ? LARAVEL_START : request()->server('REQUEST_TIME_FLOAT')));
+
         /*
          * This class is a Package Service Provider
          *
@@ -24,14 +27,28 @@ class SerapServiceProvider extends PackageServiceProvider
             ->hasConfigFile('serap')
             ->hasCommand(commandClassName: SerapCommand::class);
 
-        WatcherManager::register();
+        Event::listen(RouteMatched::class, function (RouteMatched $event) {
+            info('RouteMatched: ', [
+                'time' => microtime(true),
+                'event' => $event,
+            ]);
+        });
 
-        AboutCommand::add(section: 'Serap', data: fn (): array => [
+
+        AboutCommand::add(section: 'Serap', data: fn(): array => [
             'Version' => '0.0.1',
         ]);
 
-        $this->app->afterResolving(abstract: Schedule::class, callback: function (Schedule $schedule): void {
-            $schedule->job(job: new LogSenderJob)->everyMinute();
+
+        $this->app->terminating(function () {
+            info('app terminating: ' . microtime(true));
         });
+    }
+
+    public function boot()
+    {
+        parent::boot();
+
+        info('app boot: ' . microtime(true));
     }
 }
