@@ -26,16 +26,13 @@ class SerapUtils
      */
     public static function mask(array $data, array $sensitiveKeys = [], string $mask = '******'): array
     {
-        if (count($sensitiveKeys) === 0) {
-            $sensitiveKeys = config('serap.sensitive_keys', []);
-        }
+        $sensitiveKeys = array_merge($sensitiveKeys, config('serap.sensitive_keys', []));
 
         $normalizedKeys = array_map(fn ($k) => self::normalizeKey($k), $sensitiveKeys);
 
         foreach ($data as $key => $value) {
             $normalizedKey = self::normalizeKey($key);
 
-            // khusus untuk cookie/set-cookie
             if (in_array($normalizedKey, ['cookie', 'set_cookie'], true)) {
                 if (is_array($value)) {
                     $data[$key] = array_map(function ($cookieString) use ($normalizedKeys, $mask) {
@@ -45,7 +42,6 @@ class SerapUtils
                     $data[$key] = self::maskCookieString($value, $normalizedKeys, $mask);
                 }
             } elseif (in_array($normalizedKey, $normalizedKeys, true)) {
-                // kalau key biasa sensitif
                 $data[$key] = $mask;
             } elseif (is_array($value)) {
                 $data[$key] = self::mask($value, $sensitiveKeys, $mask);
@@ -213,11 +209,6 @@ class SerapUtils
             $data = $decoded;
         }
 
-        // return json_encode([
-        //     'is_truncated' => $isTruncated,
-        //     'data' => $data,
-        // ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-
         return [
             'is_truncated' => $isTruncated,
             'data' => $data,
@@ -287,7 +278,7 @@ class SerapUtils
         if ($file->flock(LOCK_EX)) {
             $file->fwrite(
                 json_encode($log, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
-                .PHP_EOL
+                    .PHP_EOL
             );
             $file->flock(LOCK_UN);
         }
@@ -311,10 +302,8 @@ class SerapUtils
             'name' => $user->name,
             'email' => $user->email,
             'username' => $user?->username,
+            'email_verified_at' => $user?->email_verified_at?->toDateTimeString(),
             'created_at' => $user?->created_at?->toDateTimeString(),
-            'first_name' => $user?->first_name,
-            'last_name' => $user?->last_name,
-            'avatar' => $user?->avatar ?? $user?->photo ?? $user?->profile_photo_url ?? $user?->profile_picture_url ?? $user?->profile_picture ?? $user?->profileImage ?? $user?->avatar_url ?? $user?->foto,
         ];
     }
 
@@ -343,5 +332,21 @@ class SerapUtils
         $file->setFlags(SplFileObject::READ_AHEAD | SplFileObject::SKIP_EMPTY | SplFileObject::DROP_NEW_LINE);
 
         return iterator_to_array($file);
+    }
+
+    /**
+     * Return the content size in bytes, preferring an explicit length header when available.
+     */
+    public static function getPayloadSizeBytes(?string $content, ?string $lengthHeader = null): int
+    {
+        if (is_numeric($lengthHeader)) {
+            return (int) $lengthHeader;
+        }
+
+        if ($content === null) {
+            return 0;
+        }
+
+        return mb_strlen($content, '8bit');
     }
 }
