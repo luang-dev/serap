@@ -2,37 +2,53 @@
 
 namespace LuangDev\Serap\Watchers;
 
-
 use Illuminate\Foundation\Http\Events\RequestHandled;
 use LuangDev\Serap\Facades\Serap;
 use LuangDev\Serap\SerapUtils;
-use LuangDev\Serap\Facades\Clock;
 
-class ResponseWatcher
+final class ResponseWatcher
 {
-    public function handle(RequestHandled $event)
+    public function handle(RequestHandled $event): void
     {
         $response = $event->response;
 
-        Serap::setTimestamp('request_handled', Clock::nowIso8601());
+        // mark timing
+        Serap::mark('request_handled');
 
-        $rawResponseContent = $response->getContent();
-        $responseSize = SerapUtils::getPayloadSizeBytes(is_string($rawResponseContent) ? $rawResponseContent : "", $response->headers->get("Content-Length"));
+        $raw = $response->getContent();
         $type = SerapUtils::detectResponseType($response);
-        $responseContent = SerapUtils::safeContent(is_string($rawResponseContent) ? $rawResponseContent : "", $type);
 
-        $transaction = Serap::getTransaction();
-        $transaction["extra"]["response"] = [
-            "user_agent" => $response->headers->get("user-agent"),
-            "headers" => $response->headers->all(),
-            "status" => $response->getStatusCode(),
-            "memory" => SerapUtils::getMemoryUsage(),
-            "response_type" => $type,
-            "response_size" => $responseSize,
-            "content" => $responseContent["data"],
-            "is_truncated" => $responseContent["is_truncated"],
-        ];
+        $responseSize = SerapUtils::getPayloadSizeBytes(
+            is_string($raw) ? $raw : '',
+            $response->headers->get('Content-Length')
+        );
 
-        Serap::setTransaction($transaction);
+        // capture policy
+        $mode = (string) config('serap.capture.response_body', 'off'); // off|errors|transactions
+        $shouldCaptureBody = $mode === 'transactions'
+            || ($mode === 'errors' && $response->getStatusCode() >= 500);
+
+        $safe = ['data' => [], 'is_truncated' => true];
+        if ($shouldCaptureBody) {
+            $safe = SerapUtils::safeContent(is_string($raw) ? $raw : '', $type);
+        }
+
+        Serap::mergeTransaction([
+            'extra' => [
+                'response' => [
+                    'headers' => SerapUtils::mask($response->headers->all()),
+                    'status' => $response->getStatusCode(),
+                    'memory' => SerapUtils::getMemoryUsage(),
+                    'response_type' => $type,
+                    'response_size' => $responseSize,
+                    'body_captured' => $shouldCaptureBody,
+                    'content' => $shouldCaptureBody ? ($safe['data'] ?? []) : [],
+                    'is_truncated' => $shouldCaptureBody ? (bool) ($safe['is_truncated'] ?? false) : true,
+                ],
+            ],
+        ]);
+
+        // compute duration_ms + attach marks (+ optional mark_timestamps)
+        Serap::finalizeTransaction();
     }
 }

@@ -10,7 +10,6 @@ use Illuminate\Routing\Events\RouteMatched;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Event;
 use LuangDev\Serap\Commands\SerapCommand;
-use LuangDev\Serap\Facades\Clock;
 use LuangDev\Serap\Watchers\QueryWatcher;
 use LuangDev\Serap\Watchers\ResponseWatcher;
 use Spatie\LaravelPackageTools\Package;
@@ -20,55 +19,78 @@ class SerapServiceProvider extends PackageServiceProvider
 {
     public function configurePackage(Package $package): void
     {
-        /*
-         * This class is a Package Service Provider
-         *
-         * More info: https://github.com/spatie/laravel-package-tools
-         */
         $package
             ->name('serap')
             ->hasConfigFile('serap')
             ->hasCommand(SerapCommand::class);
-
-        // info("app registered: " . app(Clock::class)->monotonicNs());
     }
 
     /**
-     * Method ini dipanggil setelah package selesai dikonfigurasi & di-register
+     * Dipanggil setelah package selesai di-boot
      */
-    public function packageBooted(): void
-    {
-        $this->registerListeners();
-        $this->registerAboutCommand();
+   public function packageBooted(): void
+{
+    $this->registerListeners();
+    $this->registerAboutCommand();
 
-        $router = $this->app->make(Router::class);
-        $router->pushMiddlewareToGroup('web', SerapMiddleware::class);
-        $router->pushMiddlewareToGroup('api', SerapMiddleware::class);
+    $router = $this->app->make(Router::class);
+    $router->pushMiddlewareToGroup('web', SerapMiddleware::class);
+    $router->pushMiddlewareToGroup('api', SerapMiddleware::class);
 
-        app(Serap::class)->setTimestamp('app_booted', Clock::nowIso8601());
-    }
+    // app(Serap::class)->mark('app_booted'); // ❌ sebaiknya dihapus
+}
+
 
     public function packageRegistered(): void
     {
+        // Singleton instances
         $this->app->singleton(SerapMiddleware::class);
         $this->app->singleton(Serap::class, fn () => new Serap());
         $this->app->singleton(Clock::class, fn () => new Clock());
 
-        app(Serap::class)->setTimestamp('app_registered', Clock::nowIso8601());
+        // Mark "app registered"
+        // app(Serap::class)->mark('app_registered');
     }
 
     protected function registerListeners(): void
     {
-        Event::listen(RouteMatched::class, function () {
-            app(Serap::class)->setTimestamp('route_matched', Clock::nowIso8601());
+        // Route matched -> mark offset ms + optional ISO per mark
+        Event::listen(RouteMatched::class, function (RouteMatched $event) {
+            $serap = app(Serap::class);
+
+            // Mark timing
+            $serap->mark('route_matched');
+
+            // Sekalian update nama transaction dengan route name/controller (tanpa reset anchor)
+            // Ini contoh pemakaian mergeTransaction() yang benar
+            $routeName = $event->route?->getName();
+            $action = $event->route?->getActionName();
+
+            $serap->mergeTransaction([
+                'name' => $routeName ?: ($event->request?->method().' '.$event->request?->path()),
+                'extra' => [
+                    'request' => [
+                        'route' => [
+                            'name' => $routeName,
+                            'action' => $action,
+                        ],
+                    ],
+                ],
+            ]);
         });
 
+        // ResponseWatcher sebaiknya:
+        // - set mark request_handled
+        // - merge response info
+        // - finalizeTransaction
         Event::listen(RequestHandled::class, ResponseWatcher::class);
 
+        // App terminating -> mark
         Event::listen(Terminating::class, function () {
-            app(Serap::class)->setTimestamp('app_terminated', Clock::nowIso8601());
+            app(Serap::class)->mark('app_terminated');
         });
 
+        // Query watcher -> tambah spans
         Event::listen(QueryExecuted::class, QueryWatcher::class);
     }
 

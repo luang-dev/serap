@@ -3,37 +3,58 @@
 namespace LuangDev\Serap\Watchers;
 
 use Illuminate\Database\Events\QueryExecuted;
-use Illuminate\Support\Facades\DB;
 use LuangDev\Serap\Facades\Serap;
-use LuangDev\Serap\SerapUtils;
-use LuangDev\Serap\Facades\Clock;
 
-class QueryWatcher
+final class QueryWatcher
 {
-    public static function handle(): void
+    public function handle(QueryExecuted $event): void
     {
-        DB::listen(callback: function (QueryExecuted $query): void {
-            if (self::shouldSkipQuery($query->sql)) {
-                return;
-            }
+        if ($this->shouldSkipQuery($event->sql)) {
+            return;
+        }
 
-            $bindings = $query->bindings ?? [];
-            $maskedBindings = self::mapBindingsWithColumns(sql: $query->sql, bindings: $bindings);
+        $bindingsMode = (string) config('serap.capture.sql_bindings', 'off'); // off|local_only|on
+        $bindings = $event->bindings ?? [];
 
-            $query = [
-                'sql' => $query->sql,
-                'bindings' => $maskedBindings,
-                'duration' => $query->time,
-                'connection' => $query?->connectionName,
-                'timestamp' => Clock::nowIso8601(),
-                'time_ns' => Clock::monotonicNs(),
-            ];
+        $maskedBindings = [];
+        if ($bindingsMode === 'on' || ($bindingsMode === 'local_only' && app()->environment('local'))) {
+            $maskedBindings = self::mapBindingsWithColumns($event->sql, $bindings);
+        }
 
-            Serap::addSpan($query);
-        });
+        Serap::addSpan([
+            'type' => 'db',
+            'subtype' => $event->connection->getDriverName(),
+            'action' => 'query',
+            'name' => $this->shortName($event->sql),
+            'sql' => $event->sql,
+            'bindings' => $maskedBindings,
+            'duration_ms' => (float) $event->time,
+            'connection' => $event->connectionName,
+            'db_name' => $this->getDbName($event),
+            'query_type' => $this->getQueryType($event),
+        ]);
     }
 
-    protected static function shouldSkipQuery(string $sql): bool
+    protected function getDbName($event): string
+    {
+        return method_exists($event->connection, 'getDatabaseName')
+            ? $event->connection->getDatabaseName()
+            : null;
+    }
+
+    protected function getQueryType($event): string
+    {
+        return strtoupper(strtok($event->sql, " \t\n\r"));
+    }
+
+    protected function shortName(string $sql): string
+    {
+        $s = ltrim($sql);
+        $op = strtoupper(strtok($s, " \t\n\r"));
+        return $op !== '' ? $op.' query' : 'DB query';
+    }
+
+    protected function shouldSkipQuery(string $sql): bool
     {
         $skipTables = ['jobs', 'failed_jobs', 'cache', 'sessions'];
 
@@ -55,9 +76,11 @@ class QueryWatcher
         $mapped = [];
         $bindingIndex = 0;
 
-        $sensitive = array_map(fn ($k) => self::normalizeKey($k), config('gol.sensitive_keys', ['password']));
+        $sensitive = array_map(
+            fn ($k) => self::normalizeKey($k),
+            config('serap.sanitize.field_deny', ['password', 'token', 'secret'])
+        );
 
-        // WHERE col = ? / col > ? / etc
         if (preg_match_all('/([`\w\.\"]+)\s*(=|<|>|<=|>=|LIKE|BETWEEN|IN)\s*(\?|[\(])/i', $sql, $matches, PREG_SET_ORDER)) {
             foreach ($matches as $match) {
                 $col = self::normalizeKey($match[1]);
@@ -71,7 +94,6 @@ class QueryWatcher
                         $mapped[$col.'_to'] = self::maskIfSensitive($col, $bindings[$bindingIndex++], $sensitive);
                     }
                 } elseif ($op === 'IN') {
-                    // hitung jumlah ? dalam IN (...)
                     if (preg_match('/\bIN\s*\(([^)]+)\)/i', $match[0], $inMatch)) {
                         $placeholders = substr_count($inMatch[1], '?');
                         $values = [];
@@ -90,7 +112,6 @@ class QueryWatcher
             }
         }
 
-        // UPDATE SET col = ?
         if (preg_match_all('/SET\s+[`"]?(\w+)[`"]?\s*=\s*\?/i', $sql, $m)) {
             foreach ($m[1] as $col) {
                 $col = self::normalizeKey($col);
@@ -100,9 +121,12 @@ class QueryWatcher
             }
         }
 
-        // INSERT INTO (col1, col2, ...) VALUES (?, ?, ...)
         if (preg_match('/\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)/i', $sql, $m)) {
-            $cols = array_map(fn ($c) => self::normalizeKey(str_replace(['`', '"'], '', $c)), explode(',', $m[1]));
+            $cols = array_map(
+                fn ($c) => self::normalizeKey(str_replace(['`', '"'], '', $c)),
+                explode(',', $m[1])
+            );
+
             foreach ($cols as $col) {
                 if (isset($bindings[$bindingIndex])) {
                     $mapped[$col] = self::maskIfSensitive($col, $bindings[$bindingIndex++], $sensitive);
@@ -117,39 +141,11 @@ class QueryWatcher
     {
         $key = trim($key, '`" ');
         $key = strtolower($key);
-
         return str_replace('-', '_', $key);
     }
 
     protected static function maskIfSensitive(string $col, $value, array $sensitive, string $mask = '******')
     {
         return in_array($col, $sensitive, true) ? $mask : $value;
-    }
-
-    public static function extractAllInValues(string $sql)
-    {
-        // TODO: handle IN query
-        // $result = [];
-
-        // preg_match_all('/([\w\.]+)\s+in\s*\(([^)]+)\)/i', $sql, $matches, PREG_SET_ORDER);
-
-        // foreach ($matches as $match) {
-        //     $field = $match[1];
-        //     $rawValues = $match[2];
-
-        //     $values = array_map(function ($v) {
-        //         $v = trim($v, " \t\n\r\0\x0B'\""); // trim spasi dan kutip
-
-        //         return is_numeric($v) ? (int) $v : $v;
-        //     }, explode(',', $rawValues));
-
-        //     if (str_contains($field, '.')) {
-        //         $field = substr($field, strrpos($field, '.') + 1);
-        //     }
-
-        //     $result[$field] = $values;
-        // }
-
-        // return $result;
     }
 }
