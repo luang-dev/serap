@@ -2,23 +2,18 @@
 
 namespace LuangDev\Serap;
 
-use Illuminate\Contracts\Debug\ExceptionHandler as ExceptionHandlerContract;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Foundation\Console\AboutCommand;
 use Illuminate\Foundation\Events\Terminating;
 use Illuminate\Foundation\Http\Events\RequestHandled;
+use Illuminate\Log\Events\MessageLogged;
 use Illuminate\Routing\Events\RouteMatched;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Event;
 use LuangDev\Serap\Commands\SerapCommand;
-use LuangDev\Serap\Exceptions\SerapExceptionHandler;
 use LuangDev\Serap\Watchers\ExceptionWatcher;
-use LuangDev\Serap\Watchers\FatalErrorWatcher;
-use LuangDev\Serap\Watchers\PhpErrorWatcher;
 use LuangDev\Serap\Watchers\QueryWatcher;
 use LuangDev\Serap\Watchers\ResponseWatcher;
-use LuangDev\Serap\Watchers\SerapErrorTrap;
-use LuangDev\Serap\Watchers\ShutdownTrap;
 use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
 
@@ -62,11 +57,12 @@ class SerapServiceProvider extends PackageServiceProvider
         $this->app->singleton(JsonlExporter::class, fn() => new JsonlExporter());
 
         $this->app->singleton(SerapMiddleware::class, fn() => new SerapMiddleware(app(Sampler::class)));
-
     }
 
     protected function registerListeners(): void
     {
+        ExceptionWatcher::handle();
+
         // Route matched -> mark offset ms + optional ISO per mark
         Event::listen(RouteMatched::class, function (RouteMatched $event) {
             $serap = app(Serap::class);
@@ -105,6 +101,10 @@ class SerapServiceProvider extends PackageServiceProvider
 
         // Query watcher -> tambah spans
         Event::listen(QueryExecuted::class, QueryWatcher::class);
+
+        // Event::listen(MessageLogged::class, function (MessageLogged $event) {
+        //     // write 
+        // });
     }
 
     protected function registerAboutCommand(): void

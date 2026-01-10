@@ -252,11 +252,11 @@ class Serap
         $this->transaction['end_unix_ms'] = (int) intdiv($endUs, 1000);
 
         // optional attach marks into context
-        $this->transaction['context']['marks'] = $this->marks;
+        // $this->transaction['context']['marks'] = $this->marks;
 
-        if ((bool) config('serap.capture.mark_timestamps', true)) {
-            $this->transaction['context']['mark_timestamps'] = $this->markTimestamps;
-        }
+        // if ((bool) config('serap.capture.mark_timestamps', true)) {
+        //     $this->transaction['context']['mark_timestamps'] = $this->markTimestamps;
+        // }
 
         // If still unknown, infer from response status if present
         if (($this->transaction['outcome'] ?? 'unknown') === 'unknown') {
@@ -292,7 +292,7 @@ class Serap
         }
 
         // legacy (epoch ms string)
-        $this->setTimestamp($type, (string) $this->eventUnixMsFromNs($eventNs));
+        // $this->setTimestamp($type, (string) $this->eventUnixMsFromNs($eventNs));
     }
 
     public function setTimestamp(string $type, string $timestamp): void

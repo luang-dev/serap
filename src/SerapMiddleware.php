@@ -23,7 +23,8 @@ class SerapMiddleware
         Context::add('serap_trace_id', $traceId);
 
         // Head-based sampling decision (deterministic)
-        $sampled = $this->sampler->shouldSample($traceId);
+        // $sampled = $this->sampler->shouldSample($traceId);
+        $sampled = true;
         Context::add('serap_sampled', $sampled);
 
         // propagate to downstream
