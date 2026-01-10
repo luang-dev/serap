@@ -39,12 +39,19 @@ class Serap
 
     // Legacy (optional): epoch ms string (keep if you still need)
     public string $appBoot = '';
+
     public string $appRegistered = '';
+
     public string $routeMatched = '';
+
     public string $requestHandled = '';
+
     public string $middlewareHandled = '';
+
     public string $middlewareEnded = '';
+
     public string $middlewareTerminated = '';
+
     public string $appTerminated = '';
 
     /**
@@ -53,9 +60,11 @@ class Serap
      * - laravelStartWall: epoch seconds (float) untuk request start
      */
     public int $anchorMonoNs = 0;
+
     public float $laravelStartWall = 0.0;
 
     public array $marks = [];
+
     public array $markTimestamps = []; // absolute unix ms/us per mark (optional)
 
     /** @var array<string, array<string,mixed>> */
@@ -258,6 +267,11 @@ class Serap
         //     $this->transaction['context']['mark_timestamps'] = $this->markTimestamps;
         // }
 
+        if ($this->transaction['duration_ms'] > 1000) {
+            $this->transaction['sampled'] = true;
+            $this->transaction['level'] = 'warning';
+        }
+
         // If still unknown, infer from response status if present
         if (($this->transaction['outcome'] ?? 'unknown') === 'unknown') {
             $status = $this->transaction['context']['response']['status'] ?? null;
@@ -279,7 +293,7 @@ class Serap
         $eventNs = Clock::monotonic();
 
         // offset ms from tx anchor
-        $this->marks[$type . '_ms'] = round($this->eventOffsetMs($eventNs), 3);
+        $this->marks[$type.'_ms'] = round($this->eventOffsetMs($eventNs), 3);
 
         // optional absolute unix timestamps for marks
         $capture = (bool) config('serap.capture.mark_timestamps', true);
@@ -287,8 +301,8 @@ class Serap
             $ms = $this->eventUnixMsFromNs($eventNs);
             $us = $this->eventUnixUsFromNs($eventNs);
 
-            $this->markTimestamps[$type . '_unix_ms'] = $ms;
-            $this->markTimestamps[$type . '_unix_us'] = $us;
+            $this->markTimestamps[$type.'_unix_ms'] = $ms;
+            $this->markTimestamps[$type.'_unix_us'] = $us;
         }
 
         // legacy (epoch ms string)
@@ -321,6 +335,7 @@ class Serap
         if (is_string($top) && $top !== '') {
             return $top;
         }
+
         return $this->transaction['id'] ?? null;
     }
 
@@ -405,7 +420,7 @@ class Serap
      */
     public function endSpan(string $spanId, array $patch = []): void
     {
-        if (!isset($this->activeSpans[$spanId])) {
+        if (! isset($this->activeSpans[$spanId])) {
             return;
         }
 
@@ -434,7 +449,7 @@ class Serap
             $ev['end_unix_ms'] = (int) intdiv((int) $ev['end_unix_us'], 1000);
         }
 
-        if (!empty($patch)) {
+        if (! empty($patch)) {
             $ev = array_replace_recursive($ev, $patch);
         }
 
@@ -506,7 +521,7 @@ class Serap
         $this->exceptions = $exceptions;
 
         // If any exception exists => outcome failure (unless you want more nuance)
-        if (!empty($exceptions)) {
+        if (! empty($exceptions)) {
             $this->setOutcome('failure');
         }
     }
@@ -554,6 +569,7 @@ class Serap
     private function eventUnixUsFromNs(int $eventNs): int
     {
         $eventWallSeconds = $this->laravelStartWall + (($eventNs - $this->anchorMonoNs) / 1_000_000_000);
+
         return $this->epochSecondsToUnixUs($eventWallSeconds);
     }
 

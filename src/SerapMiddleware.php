@@ -7,7 +7,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Context;
 use Illuminate\Support\Str;
 use LuangDev\Serap\Facades\Serap;
-use LuangDev\Serap\Sampler;
 use Symfony\Component\HttpFoundation\Response;
 
 class SerapMiddleware
@@ -130,7 +129,7 @@ class SerapMiddleware
         }
 
         // kalau tidak sampled, jangan capture body (hemat)
-        if (!$sampled) {
+        if (! $sampled) {
             return false;
         }
 

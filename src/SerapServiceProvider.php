@@ -42,21 +42,21 @@ class SerapServiceProvider extends PackageServiceProvider
         // app(Serap::class)->mark('app_booted'); // ❌ sebaiknya dihapus
     }
 
-
     public function packageRegistered(): void
     {
         // Singleton instances
-        $this->app->singleton(Serap::class, fn() => new Serap());
-        $this->app->singleton(Clock::class, fn() => new Clock());
+        $this->app->singleton(Serap::class, fn () => new Serap);
+        $this->app->singleton(Clock::class, fn () => new Clock);
 
         $this->app->singleton(Sampler::class, function () {
             $rate = (float) config('serap.sampling.rate', 0.1);
+
             return new Sampler($rate);
         });
 
-        $this->app->singleton(JsonlExporter::class, fn() => new JsonlExporter());
+        $this->app->singleton(JsonlExporter::class, fn () => new JsonlExporter);
 
-        $this->app->singleton(SerapMiddleware::class, fn() => new SerapMiddleware(app(Sampler::class)));
+        $this->app->singleton(SerapMiddleware::class, fn () => new SerapMiddleware(app(Sampler::class)));
     }
 
     protected function registerListeners(): void
@@ -76,7 +76,7 @@ class SerapServiceProvider extends PackageServiceProvider
             $action = $event->route?->getActionName();
 
             $serap->mergeTransaction([
-                'name' => $routeName ?: ($event->request?->method() . ' ' . $event->request?->path()),
+                'name' => $routeName ?: ($event->request?->method().' '.$event->request?->path()),
                 'extra' => [
                     'request' => [
                         'route' => [
@@ -103,7 +103,7 @@ class SerapServiceProvider extends PackageServiceProvider
         Event::listen(QueryExecuted::class, QueryWatcher::class);
 
         // Event::listen(MessageLogged::class, function (MessageLogged $event) {
-        //     // write 
+        //     // write
         // });
     }
 
@@ -111,7 +111,7 @@ class SerapServiceProvider extends PackageServiceProvider
     {
         AboutCommand::add(
             section: 'Serap',
-            data: fn(): array => [
+            data: fn (): array => [
                 'Version' => '0.0.1',
             ],
         );

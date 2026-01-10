@@ -19,12 +19,9 @@ final class JsonlExporter
         }
 
         info('serap', [
-            'serap' => [
-                'metadata' => Serap::getMetadata(),
-                'transaction' => $tx,
-                'spans' => Serap::getSpans(),
-                'exceptions' => Serap::getExceptions(),
-            ],
+            'metadata' => Serap::getMetadata(),
+            'transaction' => $tx,
+            'spans' => Serap::getSpans(),
         ]);
     }
 
@@ -40,12 +37,9 @@ final class JsonlExporter
         }
 
         info('serap', [
-            'serap' => [
-                'metadata' => Serap::getMetadata(),
-                'transaction' => $tx,
-                'spans' => Serap::getSpans(),
-                'exceptions' => Serap::getExceptions(),
-            ],
+            'metadata' => Serap::getMetadata(),
+            'transaction' => $tx,
+            'spans' => Serap::getSpans(),
         ]);
     }
 }

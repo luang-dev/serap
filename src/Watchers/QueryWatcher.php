@@ -13,6 +13,10 @@ final class QueryWatcher
             return;
         }
 
+        $durationMs = (float) $event->time;
+
+        $isSlow = $durationMs >= 1000.0;
+
         $bindingsMode = (string) config('serap.capture.sql_bindings', 'off'); // off|local_only|on
         $bindings = $event->bindings ?? [];
 
@@ -22,23 +26,26 @@ final class QueryWatcher
         }
 
         Serap::addSpan([
-            // unified envelope fields
             'type' => 'db',
             'name' => $this->shortName($event->sql),
-            'level' => 'info',
-            'duration_ms' => (float) $event->time,
+            'level' => $isSlow ? 'warning' : 'info',
+            'duration_ms' => $durationMs,
+            'sampled' => $isSlow ? true : null,
 
-            // everything specific goes into context
+            'outcome' => $isSlow ? 'failure' : 'unknown',
+
             'context' => [
-                // 'db' => [
-                    'driver' => $event->connection->getDriverName(),
-                    'connection' => $event->connectionName,
-                    'database' => $this->getDbName($event),
-                    'operation' => $this->getQueryType($event->sql),
-                    'statement' => $event->sql,
-                    'bindings' => $maskedBindings,
-                ],
-            // ],
+                'driver' => $event->connection->getDriverName(),
+                'connection' => $event->connectionName,
+                'database' => $this->getDbName($event),
+                'operation' => $this->getQueryType($event->sql),
+                'statement' => $event->sql,
+                'bindings' => $maskedBindings,
+
+                // helpful UI flags
+                'slow' => $isSlow,
+                'threshold_ms' => 1000,
+            ],
         ]);
     }
 
@@ -67,9 +74,9 @@ final class QueryWatcher
 
         foreach ($skipTables as $table) {
             if (
-                stripos($sql, '"'.$table.'"') !== false ||
-                stripos($sql, '`'.$table.'`') !== false ||
-                stripos($sql, ' '.$table.' ') !== false
+                stripos($sql, '"' . $table . '"') !== false ||
+                stripos($sql, '`' . $table . '`') !== false ||
+                stripos($sql, ' ' . $table . ' ') !== false
             ) {
                 return true;
             }
@@ -77,6 +84,8 @@ final class QueryWatcher
 
         return false;
     }
+
+    // ===== binding helpers (unchanged) =====
 
     public static function mapBindingsWithColumns(string $sql, array $bindings): array
     {
@@ -95,10 +104,10 @@ final class QueryWatcher
 
                 if ($op === 'BETWEEN') {
                     if (isset($bindings[$bindingIndex])) {
-                        $mapped[$col.'_from'] = self::maskIfSensitive($col, $bindings[$bindingIndex++], $sensitive);
+                        $mapped[$col . '_from'] = self::maskIfSensitive($col, $bindings[$bindingIndex++], $sensitive);
                     }
                     if (isset($bindings[$bindingIndex])) {
-                        $mapped[$col.'_to'] = self::maskIfSensitive($col, $bindings[$bindingIndex++], $sensitive);
+                        $mapped[$col . '_to'] = self::maskIfSensitive($col, $bindings[$bindingIndex++], $sensitive);
                     }
                 } elseif ($op === 'IN') {
                     if (preg_match('/\bIN\s*\(([^)]+)\)/i', $match[0], $inMatch)) {

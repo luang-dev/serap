@@ -10,6 +10,7 @@ final class ExceptionWatcher
 {
     /**
      * Prevent duplicate capture within same request.
+     *
      * @var array<string, bool>
      */
     private static array $seen = [];
@@ -19,7 +20,7 @@ final class ExceptionWatcher
      */
     public static function handle(): void
     {
-       app()->afterResolving(ExceptionHandler::class, function ($handler) { 
+        app()->afterResolving(ExceptionHandler::class, function ($handler) {
             $handler->reportable(function (Throwable $e) {
                 // Guard duplicate
                 $hash = self::fingerprint($e);
@@ -103,7 +104,7 @@ final class ExceptionWatcher
 
         // avoid super long span names
         if (mb_strlen($msg) > 160) {
-            $msg = mb_substr($msg, 0, 160) . '…';
+            $msg = mb_substr($msg, 0, 160).'…';
         }
 
         return $msg;
