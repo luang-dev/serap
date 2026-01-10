@@ -22,36 +22,43 @@ final class QueryWatcher
         }
 
         Serap::addSpan([
+            // unified envelope fields
             'type' => 'db',
-            'subtype' => $event->connection->getDriverName(),
-            'action' => 'query',
             'name' => $this->shortName($event->sql),
-            'sql' => $event->sql,
-            'bindings' => $maskedBindings,
+            'level' => 'info',
             'duration_ms' => (float) $event->time,
-            'connection' => $event->connectionName,
-            'db_name' => $this->getDbName($event),
-            'query_type' => $this->getQueryType($event),
+
+            // everything specific goes into context
+            'context' => [
+                // 'db' => [
+                    'driver' => $event->connection->getDriverName(),
+                    'connection' => $event->connectionName,
+                    'database' => $this->getDbName($event),
+                    'operation' => $this->getQueryType($event->sql),
+                    'statement' => $event->sql,
+                    'bindings' => $maskedBindings,
+                ],
+            // ],
         ]);
     }
 
-    protected function getDbName($event): string
+    protected function getDbName(QueryExecuted $event): ?string
     {
         return method_exists($event->connection, 'getDatabaseName')
             ? $event->connection->getDatabaseName()
             : null;
     }
 
-    protected function getQueryType($event): string
+    protected function getQueryType(string $sql): string
     {
-        return strtoupper(strtok($event->sql, " \t\n\r"));
+        $s = ltrim($sql);
+        return strtoupper(strtok($s, " \t\n\r")) ?: 'UNKNOWN';
     }
 
     protected function shortName(string $sql): string
     {
-        $s = ltrim($sql);
-        $op = strtoupper(strtok($s, " \t\n\r"));
-        return $op !== '' ? $op.' query' : 'DB query';
+        $op = $this->getQueryType($sql);
+        return $op !== 'UNKNOWN' ? $op . ' query' : 'DB query';
     }
 
     protected function shouldSkipQuery(string $sql): bool

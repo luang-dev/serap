@@ -2,6 +2,7 @@
 
 namespace LuangDev\Serap;
 
+use Illuminate\Contracts\Debug\ExceptionHandler as ExceptionHandlerContract;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Foundation\Console\AboutCommand;
 use Illuminate\Foundation\Events\Terminating;
@@ -10,8 +11,14 @@ use Illuminate\Routing\Events\RouteMatched;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Event;
 use LuangDev\Serap\Commands\SerapCommand;
+use LuangDev\Serap\Exceptions\SerapExceptionHandler;
+use LuangDev\Serap\Watchers\ExceptionWatcher;
+use LuangDev\Serap\Watchers\FatalErrorWatcher;
+use LuangDev\Serap\Watchers\PhpErrorWatcher;
 use LuangDev\Serap\Watchers\QueryWatcher;
 use LuangDev\Serap\Watchers\ResponseWatcher;
+use LuangDev\Serap\Watchers\SerapErrorTrap;
+use LuangDev\Serap\Watchers\ShutdownTrap;
 use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
 
@@ -28,28 +35,34 @@ class SerapServiceProvider extends PackageServiceProvider
     /**
      * Dipanggil setelah package selesai di-boot
      */
-   public function packageBooted(): void
-{
-    $this->registerListeners();
-    $this->registerAboutCommand();
+    public function packageBooted(): void
+    {
+        $this->registerListeners();
+        $this->registerAboutCommand();
 
-    $router = $this->app->make(Router::class);
-    $router->pushMiddlewareToGroup('web', SerapMiddleware::class);
-    $router->pushMiddlewareToGroup('api', SerapMiddleware::class);
+        $router = $this->app->make(Router::class);
+        $router->pushMiddlewareToGroup('web', SerapMiddleware::class);
+        $router->pushMiddlewareToGroup('api', SerapMiddleware::class);
 
-    // app(Serap::class)->mark('app_booted'); // ❌ sebaiknya dihapus
-}
+        // app(Serap::class)->mark('app_booted'); // ❌ sebaiknya dihapus
+    }
 
 
     public function packageRegistered(): void
     {
         // Singleton instances
-        $this->app->singleton(SerapMiddleware::class);
-        $this->app->singleton(Serap::class, fn () => new Serap());
-        $this->app->singleton(Clock::class, fn () => new Clock());
+        $this->app->singleton(Serap::class, fn() => new Serap());
+        $this->app->singleton(Clock::class, fn() => new Clock());
 
-        // Mark "app registered"
-        // app(Serap::class)->mark('app_registered');
+        $this->app->singleton(Sampler::class, function () {
+            $rate = (float) config('serap.sampling.rate', 0.1);
+            return new Sampler($rate);
+        });
+
+        $this->app->singleton(JsonlExporter::class, fn() => new JsonlExporter());
+
+        $this->app->singleton(SerapMiddleware::class, fn() => new SerapMiddleware(app(Sampler::class)));
+
     }
 
     protected function registerListeners(): void
@@ -67,7 +80,7 @@ class SerapServiceProvider extends PackageServiceProvider
             $action = $event->route?->getActionName();
 
             $serap->mergeTransaction([
-                'name' => $routeName ?: ($event->request?->method().' '.$event->request?->path()),
+                'name' => $routeName ?: ($event->request?->method() . ' ' . $event->request?->path()),
                 'extra' => [
                     'request' => [
                         'route' => [
@@ -98,7 +111,7 @@ class SerapServiceProvider extends PackageServiceProvider
     {
         AboutCommand::add(
             section: 'Serap',
-            data: fn (): array => [
+            data: fn(): array => [
                 'Version' => '0.0.1',
             ],
         );

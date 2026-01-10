@@ -12,7 +12,7 @@ final class ResponseWatcher
     {
         $response = $event->response;
 
-        // mark timing
+        // mark timing (adds marks + optional mark_timestamps)
         Serap::mark('request_handled');
 
         $raw = $response->getContent();
@@ -33,10 +33,11 @@ final class ResponseWatcher
             $safe = SerapUtils::safeContent(is_string($raw) ? $raw : '', $type);
         }
 
+        // merge into unified event: transaction.context.response
         Serap::mergeTransaction([
-            'extra' => [
+            'context' => [
                 'response' => [
-                    'headers' => SerapUtils::mask($response->headers->all()),
+                    'headers' => Serap::sanitizeResponseHeaders($response->headers->all()),
                     'status' => $response->getStatusCode(),
                     'memory' => SerapUtils::getMemoryUsage(),
                     'response_type' => $type,
@@ -48,7 +49,11 @@ final class ResponseWatcher
             ],
         ]);
 
-        // compute duration_ms + attach marks (+ optional mark_timestamps)
+        if ($response->getStatusCode() >= 500) {
+            Serap::mergeTransaction(['sampled' => true, 'outcome' => 'failure', 'level' => 'error']);
+        }
+
+        // finalize duration + attach marks into transaction.context
         Serap::finalizeTransaction();
     }
 }

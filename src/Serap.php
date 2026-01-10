@@ -2,39 +2,42 @@
 
 namespace LuangDev\Serap;
 
-use DateTimeImmutable;
-use DateTimeZone;
 use Illuminate\Support\Str;
 use LuangDev\Serap\Facades\Clock;
 
 /**
- * Serap core collector
+ * Serap core collector (unified event envelope + epoch ms/us + monotonic ns)
  *
- * - Durasi/marks pakai monotonic clock (hrtime) => akurat
- * - Timestamp absolut (ISO) tetap tersedia lewat kalibrasi ke laravel_start (epoch)
- * - Error selalu bisa dicapture terlepas dari sampling (kalau kamu implement nanti)
+ * Unified event fields (transaction & span):
+ * - kind: "transaction" | "span"
+ * - schema_version
+ * - trace_id
+ * - id
+ * - parent_id
+ * - start_time_ns, end_time_ns (monotonic ns)
+ * - start_unix_ms, end_unix_ms (epoch ms)
+ * - start_unix_us, end_unix_us (epoch us)  <-- avoid 0ms spans
+ * - duration_ms
+ * - type, name, level
+ * - sampled, outcome
+ * - context: event-specific payload
  *
- * Catatan:
- * - Pastikan setTransaction() dipanggil PALING AWAL (mis. middleware paling luar)
- * - finalizeTransaction() dipanggil saat request selesai
+ * Notes:
+ * - setTransaction() must be called first
+ * - finalizeTransaction() at the end
+ * - reset() each request (singleton)
  */
 class Serap
 {
-    /**
-     * Spans bisa berupa:
-     * - list span final: addSpan()
-     * - map span active: startSpan()/endSpan()
-     */
+    /** @var array<int, array<string,mixed>> */
     public array $spans = [];
 
     public array $exceptions = [];
 
+    /** @var array<string,mixed> */
     public array $transaction = [];
 
-    /**
-     * (legacy) properties lama masih dipertahankan supaya tidak breaking.
-     * Isinya akan diisi dengan ISO timestamp (bukan ns mentah).
-     */
+    // Legacy (optional): epoch ms string (keep if you still need)
     public string $appBoot = '';
     public string $appRegistered = '';
     public string $routeMatched = '';
@@ -45,40 +48,40 @@ class Serap
     public string $appTerminated = '';
 
     /**
-     * Anchor untuk konversi:
-     * - anchorMonoNs: monotonic start ns (hrtime)
-     * - laravelStartWall: epoch seconds (microtime) dari Laravel
-     *
-     * Semua marks/duration dihitung relatif ke anchorMonoNs.
-     * Semua timestamp event dihasilkan dari laravelStartWall + offsetMonotonic.
+     * Anchors:
+     * - anchorMonoNs: monotonic ns saat transaction dimulai
+     * - laravelStartWall: epoch seconds (float) untuk request start
      */
     public int $anchorMonoNs = 0;
     public float $laravelStartWall = 0.0;
 
-    /**
-     * marks: offset ms dari start transaction (APM-friendly)
-     * markTimestamps: ISO timestamp per mark (opsional, bisa dimatikan via config)
-     */
     public array $marks = [];
-    public array $markTimestamps = [];
+    public array $markTimestamps = []; // absolute unix ms/us per mark (optional)
 
-    /**
-     * Untuk startSpan()/endSpan(): simpan span aktif di map
-     */
+    /** @var array<string, array<string,mixed>> */
     private array $activeSpans = [];
+
+    /** @var list<string> */
+    private array $spanStack = [];
+
+    /** Schema version for payload */
+    private string $schemaVersion = '1.0';
 
     public function __construct()
     {
-        // inisialisasi laravelStartWall bila dipakai sebelum setTransaction()
         $this->laravelStartWall = $this->resolveLaravelStartWall();
     }
 
     /**
      * ===== Metadata =====
+     * Global info, tidak perlu dicopy ke setiap event.
+     * User disimpan di metadata (bukan di transaction/context) untuk menghindari duplikasi.
      */
-    public function getMetadata()
+    public function getMetadata(): array
     {
         return [
+            'schema_version' => $this->schemaVersion,
+
             'env' => app()->environment(),
             'app_name' => config('app.name'),
             'hostname' => gethostname(),
@@ -89,22 +92,14 @@ class Serap
             'http_host' => request()->server('HTTP_HOST'),
             'memory_usage' => SerapUtils::getMemoryUsage(),
 
-            /**
-             * timestamps:
-             * - timestamp: waktu sekarang (ISO)
-             * - laravel_start: waktu mulai request (ISO) dari LARAVEL_START/request_time_float
-             * - marks: offset ms (paling penting untuk APM)
-             * - mark_timestamps: ISO per event (opsional, untuk debugging)
-             */
             'timestamps' => [
-                'timestamp' => Clock::nowIso8601(),
-                'laravel_start' => $this->formatIsoFromEpoch($this->laravelStartWall),
+                'generated_unix_ms' => $this->epochSecondsToUnixMs(microtime(true)),
+                'generated_unix_us' => $this->epochSecondsToUnixUs(microtime(true)),
+                'laravel_start_unix_ms' => $this->epochSecondsToUnixMs($this->laravelStartWall),
+                'laravel_start_unix_us' => $this->epochSecondsToUnixUs($this->laravelStartWall),
                 ...$this->markTimestamps,
             ],
 
-            /**
-             * durations: ringkas
-             */
             'durations' => [
                 'transaction_ms' => $this->transaction['duration_ms'] ?? null,
                 ...$this->marks,
@@ -114,97 +109,193 @@ class Serap
                 'laravel' => app()->version(),
                 'php' => PHP_VERSION,
                 'serap' => '0.1',
-                'schema' => '0.1',
+                'schema' => $this->schemaVersion,
             ],
 
+            // user only once
             'user' => SerapUtils::getAuthUser(),
         ];
     }
 
     /**
-     * ===== Transaction =====
-     *
-     * Harus dipanggil PALING AWAL (mis. middleware paling luar)
+     * ===== Unified Event Base =====
      */
-    public function setTransaction(array $transaction)
+    private function newEventBase(string $kind, array $fields = []): array
     {
-        // anchor monotonic untuk semua durasi & marks (hrtime)
-        $this->anchorMonoNs = Clock::monotonicNs();
+        $id = Str::ulid()->toString();
+        $startNs = Clock::monotonic();
 
-        // laravel start (epoch seconds) sebagai anchor wall-clock untuk timestamp absolut
-        $this->laravelStartWall = $this->resolveLaravelStartWall();
+        $startUs = $this->eventUnixUsFromNs($startNs);
+        $startMs = (int) intdiv($startUs, 1000);
 
-        $this->transaction = [
-            'time_ns' => $this->anchorMonoNs, // internal (boleh kamu drop di payload final)
-            'timestamp' => $this->formatIsoFromEpoch($this->laravelStartWall), // anchor timestamp
-            'transaction_id' => Str::ulid()->toString(),
+        return [
+            'schema_version' => $this->schemaVersion,
+            'kind' => $kind, // "transaction" | "span"
             'trace_id' => SerapUtils::getTraceId(),
-            ...$transaction
+            'id' => $id,
+            'parent_id' => null,
+
+            // monotonic timestamps (accurate duration)
+            'start_time_ns' => $startNs,
+            'end_time_ns' => null,
+
+            // absolute epoch timestamps
+            'start_unix_us' => $startUs,
+            'end_unix_us' => null,
+            'start_unix_ms' => $startMs,
+            'end_unix_ms' => null,
+
+            // computed duration
+            'duration_ms' => null,
+
+            // semantics
+            'type' => null,
+            'name' => null,
+            'level' => 'info',
+
+            // sampling/outcome
+            'sampled' => true,
+            'outcome' => 'unknown', // success|failure|unknown
+
+            // payload
+            'context' => [],
+
+            ...$fields,
         ];
     }
 
-    public function getTransaction()
+    /**
+     * ===== Transaction =====
+     */
+    public function setTransaction(array $transaction): void
+    {
+        // anchor monotonic for mark/duration math
+        $this->anchorMonoNs = Clock::monotonic();
+
+        // anchor wall clock
+        $this->laravelStartWall = $this->resolveLaravelStartWall();
+
+        // transaction start = laravel start
+        $startUs = $this->epochSecondsToUnixUs($this->laravelStartWall);
+        $startMs = (int) intdiv($startUs, 1000);
+
+        $base = $this->newEventBase('transaction', [
+            'start_time_ns' => $this->anchorMonoNs,
+            'start_unix_us' => $startUs,
+            'start_unix_ms' => $startMs,
+            'parent_id' => null,
+        ]);
+
+        $tx = array_replace_recursive($base, $transaction);
+
+        // recommended defaults
+        $tx['sampled'] = $tx['sampled'] ?? (bool) config('serap.sampling.sampled', true);
+        $tx['outcome'] = $tx['outcome'] ?? 'unknown';
+
+        // drop user duplication: keep only user_id pointer in transaction
+        $user = SerapUtils::getAuthUser();
+        if (is_array($user) && array_key_exists('id', $user)) {
+            $tx['context']['user_id'] = $user['id'];
+        }
+
+        $this->transaction = $tx;
+    }
+
+    public function getTransaction(): array
     {
         return $this->transaction;
     }
 
-    /**
-     * Panggil saat request/command selesai.
-     * Menghitung duration_ms, menyertakan marks.
-     */
-    public function finalizeTransaction(): void
+    public function mergeTransaction(array $patch): void
     {
-        if ($this->anchorMonoNs === 0) {
-            // kalau belum ada transaction, tidak bisa finalize
-            return;
-        }
-
-        $endNs = Clock::monotonicNs();
-        $durationMs = $this->nsToMs($endNs - $this->anchorMonoNs);
-
-        $this->transaction['duration_ms'] = round($durationMs, 3);
-        // $this->transaction['marks'] = $this->marks;
-
-        // opsional: timestamp ISO per mark untuk debugging
-        // $captureMarkTimestamps = (bool) config('serap.capture.mark_timestamps', true);
-        // if ($captureMarkTimestamps) {
-        //     $this->transaction['mark_timestamps'] = $this->markTimestamps;
-        // }
+        $this->transaction = array_replace_recursive($this->transaction, $patch);
     }
 
     /**
-     * ===== Marks (Laravel lifecycle events) =====
-     *
-     * Gunakan ini di event listeners:
-     * serap()->mark('route_matched');
+     * Set outcome based on HTTP status or exception.
+     */
+    public function setOutcome(string $outcome): void
+    {
+        if (empty($this->transaction)) {
+            return;
+        }
+        $this->transaction['outcome'] = $outcome; // success|failure|unknown
+    }
+
+    /**
+     * Finalize transaction:
+     * - end_time_ns
+     * - duration_ms from monotonic (end-start)
+     * - end_unix_us/ms from start + duration
+     */
+    public function finalizeTransaction(): void
+    {
+        if ($this->anchorMonoNs === 0 || empty($this->transaction)) {
+            return;
+        }
+
+        $endNs = Clock::monotonic();
+        $startNs = (int) ($this->transaction['start_time_ns'] ?? $this->anchorMonoNs);
+
+        $durMs = $this->nsToMs($endNs - $startNs);
+
+        $this->transaction['end_time_ns'] = $endNs;
+        $this->transaction['duration_ms'] = round($durMs, 3);
+
+        // compute end epoch with microsecond precision
+        $startUs = (int) ($this->transaction['start_unix_us'] ?? $this->epochSecondsToUnixUs($this->laravelStartWall));
+        $durUs = (int) round(((float) $this->transaction['duration_ms']) * 1000);
+
+        $endUs = $startUs + $durUs;
+
+        $this->transaction['end_unix_us'] = $endUs;
+        $this->transaction['end_unix_ms'] = (int) intdiv($endUs, 1000);
+
+        // optional attach marks into context
+        $this->transaction['context']['marks'] = $this->marks;
+
+        if ((bool) config('serap.capture.mark_timestamps', true)) {
+            $this->transaction['context']['mark_timestamps'] = $this->markTimestamps;
+        }
+
+        // If still unknown, infer from response status if present
+        if (($this->transaction['outcome'] ?? 'unknown') === 'unknown') {
+            $status = $this->transaction['context']['response']['status'] ?? null;
+            if (is_int($status)) {
+                $this->transaction['outcome'] = ($status >= 500) ? 'failure' : 'success';
+            }
+        }
+    }
+
+    /**
+     * ===== Marks =====
      */
     public function mark(string $type): void
     {
         if ($this->anchorMonoNs === 0) {
-            // kalau transaction belum dimulai, paksa mulai (optional).
-            // Lebih baik: pastikan middleware memanggil setTransaction lebih awal.
             $this->setTransaction([]);
         }
 
-        $eventNs = Clock::monotonicNs();
+        $eventNs = Clock::monotonic();
 
-        // offset ms untuk APM
+        // offset ms from tx anchor
         $this->marks[$type . '_ms'] = round($this->eventOffsetMs($eventNs), 3);
 
-        // optional ISO timestamp per event (debug-friendly)
-        $captureMarkTimestamps = (bool) config('serap.capture.mark_timestamps', true);
-        if ($captureMarkTimestamps) {
-            $this->markTimestamps[$type] = $this->eventIsoFromNs($eventNs);
+        // optional absolute unix timestamps for marks
+        $capture = (bool) config('serap.capture.mark_timestamps', true);
+        if ($capture) {
+            $ms = $this->eventUnixMsFromNs($eventNs);
+            $us = $this->eventUnixUsFromNs($eventNs);
+
+            $this->markTimestamps[$type . '_unix_ms'] = $ms;
+            $this->markTimestamps[$type . '_unix_us'] = $us;
         }
 
-        // isi legacy properties sebagai ISO timestamp (agar tetap "timestamps event")
-        $this->setTimestamp($type, $this->eventIsoFromNs($eventNs));
+        // legacy (epoch ms string)
+        $this->setTimestamp($type, (string) $this->eventUnixMsFromNs($eventNs));
     }
 
-    /**
-     * Legacy setter: sekarang diisi ISO timestamp (bukan ns mentah).
-     */
-    public function setTimestamp(string $type, string $timestamp)
+    public function setTimestamp(string $type, string $timestamp): void
     {
         match ($type) {
             'app_booted' => $this->appBoot = $timestamp,
@@ -219,96 +310,205 @@ class Serap
         };
     }
 
-    public function mergeTransaction(array $patch): void
+    /**
+     * ===== Span Parenting =====
+     * - Default parent: current active span (top of stack)
+     * - Else: transaction.id
+     */
+    private function currentParentId(): ?string
     {
-        $this->transaction = array_replace_recursive($this->transaction, $patch);
+        $top = end($this->spanStack);
+        if (is_string($top) && $top !== '') {
+            return $top;
+        }
+        return $this->transaction['id'] ?? null;
+    }
+
+    private function pushSpan(string $spanId): void
+    {
+        $this->spanStack[] = $spanId;
+    }
+
+    private function popSpan(string $spanId): void
+    {
+        // pop until matching (safe for misordered endSpan)
+        for ($i = count($this->spanStack) - 1; $i >= 0; $i--) {
+            if ($this->spanStack[$i] === $spanId) {
+                array_splice($this->spanStack, $i, 1);
+                break;
+            }
+        }
     }
 
     /**
      * ===== Spans =====
-     *
-     * 1) addSpan() -> untuk span final (mis. DB QueryExecuted punya durasi)
-     * 2) startSpan()/endSpan() -> untuk span manual (http outbound, cache, custom)
      */
 
     /**
-     * Untuk span final (duration sudah diketahui dari event, mis QueryExecuted).
-     * Pastikan span yang kamu kirim sudah punya duration_ms bila diperlukan.
+     * addSpan(): span final (duration_ms already known, e.g. QueryExecuted)
      */
-    public function addSpan(array $span)
+    public function addSpan(array $span): void
     {
-        $transaction = $this->getTransaction();
+        if (empty($this->transaction)) {
+            // safety: if spans happen before tx
+            $this->setTransaction([]);
+        }
 
-        $this->spans[] = [
-            'time_ns' => Clock::monotonicNs(), // internal
-            'timestamp' => Clock::nowIso8601(),
-            'span_id' => Str::ulid()->toString(),
-            'parent_id' => $transaction['transaction_id'] ?? $transaction['span_id'] ?? null,
-            ...$span
-        ];
+        $base = $this->newEventBase('span', [
+            'parent_id' => $this->currentParentId(),
+        ]);
+
+        $ev = array_replace_recursive($base, $span);
+
+        // compute end_time_ns + end_unix_us/ms if duration exists
+        if (isset($ev['duration_ms']) && $ev['duration_ms'] !== null) {
+            $startNs = (int) $ev['start_time_ns'];
+            $durMs = (float) $ev['duration_ms'];
+
+            $ev['end_time_ns'] = $startNs + (int) round($durMs * 1_000_000);
+
+            $startUs = (int) ($ev['start_unix_us'] ?? $this->eventUnixUsFromNs($startNs));
+            $durUs = (int) round($durMs * 1000);
+            $endUs = $startUs + $durUs;
+
+            $ev['end_unix_us'] = $endUs;
+            $ev['end_unix_ms'] = (int) intdiv($endUs, 1000);
+        }
+
+        $this->spans[] = $ev;
     }
 
     /**
-     * Mulai span manual (akan dihitung duration saat endSpan).
+     * startSpan(): span manual (nested supported)
      */
     public function startSpan(array $span): string
     {
-        $transaction = $this->getTransaction();
+        if (empty($this->transaction)) {
+            $this->setTransaction([]);
+        }
 
-        $spanId = Str::ulid()->toString();
-        $this->activeSpans[$spanId] = [
-            'time_ns' => Clock::monotonicNs(), // start ns
-            'timestamp' => Clock::nowIso8601(), // span timestamp anchor
-            'span_id' => $spanId,
-            'parent_id' => $transaction['transaction_id'] ?? null,
-            ...$span,
-        ];
+        $base = $this->newEventBase('span', [
+            'parent_id' => $this->currentParentId(),
+        ]);
+
+        $ev = array_replace_recursive($base, $span);
+        $spanId = (string) $ev['id'];
+
+        $this->activeSpans[$spanId] = $ev;
+        $this->pushSpan($spanId);
 
         return $spanId;
     }
 
-    public function endSpan(string $spanId, array $extra = []): void
+    /**
+     * endSpan(): close manual span
+     */
+    public function endSpan(string $spanId, array $patch = []): void
     {
         if (!isset($this->activeSpans[$spanId])) {
             return;
         }
 
-        $endNs = Clock::monotonicNs();
-        $startNs = (int) $this->activeSpans[$spanId]['time_ns'];
+        $endNs = Clock::monotonic();
 
-        $span = $this->activeSpans[$spanId];
+        $ev = $this->activeSpans[$spanId];
         unset($this->activeSpans[$spanId]);
+        $this->popSpan($spanId);
 
-        $span['duration_ms'] = round($this->nsToMs($endNs - $startNs), 3);
+        $startNs = (int) ($ev['start_time_ns'] ?? 0);
+        $ev['end_time_ns'] = $endNs;
 
-        if (!empty($extra)) {
-            $span = array_merge($span, $extra);
+        if ($startNs > 0) {
+            $durMs = $this->nsToMs($endNs - $startNs);
+            $ev['duration_ms'] = round($durMs, 3);
+
+            $startUs = (int) ($ev['start_unix_us'] ?? $this->eventUnixUsFromNs($startNs));
+            $durUs = (int) round(((float) $ev['duration_ms']) * 1000);
+            $endUs = $startUs + $durUs;
+
+            $ev['end_unix_us'] = $endUs;
+            $ev['end_unix_ms'] = (int) intdiv($endUs, 1000);
+        } else {
+            $ev['duration_ms'] = 0.0;
+            $ev['end_unix_us'] = (int) ($ev['start_unix_us'] ?? $this->eventUnixUsFromNs($endNs));
+            $ev['end_unix_ms'] = (int) intdiv((int) $ev['end_unix_us'], 1000);
         }
 
-        $this->spans[] = $span;
+        if (!empty($patch)) {
+            $ev = array_replace_recursive($ev, $patch);
+        }
+
+        $this->spans[] = $ev;
     }
 
-    public function setSpans(array $spans)
+    public function getSpans(): array
+    {
+        return $this->spans;
+    }
+
+    public function setSpans(array $spans): void
     {
         $this->spans = $spans;
     }
 
-    public function getSpans()
+    /**
+     * ===== Response header sanitization helpers =====
+     * Use allowlist by default; drop set-cookie.
+     */
+    public function sanitizeResponseHeaders(array $headers): array
     {
-        return $this->spans;
+        // Drop set-cookie entirely (recommended)
+        unset($headers['set-cookie'], $headers['Set-Cookie'], $headers['set_cookie']);
+
+        $mode = (string) config('serap.sanitize.response_headers', 'allowlist'); // allowlist|mask|off
+
+        if ($mode === 'off') {
+            return [];
+        }
+
+        if ($mode === 'mask') {
+            // mask everything but keep keys
+            return SerapUtils::mask($headers);
+        }
+
+        // allowlist
+        $allow = config('serap.sanitize.response_headers_allow', [
+            'cache-control',
+            'content-type',
+            'content-length',
+            'date',
+            'x-serap-trace-id',
+        ]);
+
+        $allow = array_map('strtolower', (array) $allow);
+
+        $out = [];
+        foreach ($headers as $k => $v) {
+            $lk = strtolower((string) $k);
+            if (in_array($lk, $allow, true)) {
+                $out[$lk] = SerapUtils::mask($v);
+            }
+        }
+
+        return $out;
     }
 
     /**
      * ===== Exceptions =====
      */
-    public function setExceptions(array $exceptions)
-    {
-        $this->exceptions = $exceptions;
-    }
-
-    public function getExceptions()
+    public function getExceptions(): array
     {
         return $this->exceptions;
+    }
+
+    public function setExceptions(array $exceptions): void
+    {
+        $this->exceptions = $exceptions;
+
+        // If any exception exists => outcome failure (unless you want more nuance)
+        if (!empty($exceptions)) {
+            $this->setOutcome('failure');
+        }
     }
 
     /**
@@ -330,7 +530,6 @@ class Serap
             return (float) $rtf;
         }
 
-        // fallback
         return microtime(true);
     }
 
@@ -339,34 +538,33 @@ class Serap
         return $this->nsToMs($eventNs - $this->anchorMonoNs);
     }
 
+    private function epochSecondsToUnixMs(float $epochSeconds): int
+    {
+        return (int) floor($epochSeconds * 1000);
+    }
+
+    private function epochSecondsToUnixUs(float $epochSeconds): int
+    {
+        return (int) floor($epochSeconds * 1_000_000);
+    }
+
     /**
-     * Mengubah monotonic ns event menjadi ISO timestamp absolut,
-     * dengan mengikat offset monotonic ke laravelStartWall (epoch).
+     * Convert monotonic ns -> absolute unix us/ms
      */
-    private function eventIsoFromNs(int $eventNs): string
+    private function eventUnixUsFromNs(int $eventNs): int
     {
-        $eventWall = $this->laravelStartWall + (($eventNs - $this->anchorMonoNs) / 1_000_000_000);
-        return $this->formatIsoFromEpoch($eventWall);
+        $eventWallSeconds = $this->laravelStartWall + (($eventNs - $this->anchorMonoNs) / 1_000_000_000);
+        return $this->epochSecondsToUnixUs($eventWallSeconds);
     }
 
-    private function formatIsoFromEpoch(float $epochSeconds): string
+    private function eventUnixMsFromNs(int $eventNs): int
     {
-        $sec = (int) floor($epochSeconds);
-        $usec = (int) round(($epochSeconds - $sec) * 1_000_000);
-
-        // handle rounding overflow
-        if ($usec >= 1_000_000) {
-            $sec += 1;
-            $usec -= 1_000_000;
-        } elseif ($usec < 0) {
-            $usec = 0;
-        }
-
-        return (new DateTimeImmutable('@' . $sec))
-            ->setTimezone(new DateTimeZone('UTC'))
-            ->format('Y-m-d\TH:i:s') . sprintf('.%06dZ', $usec);
+        return (int) intdiv($this->eventUnixUsFromNs($eventNs), 1000);
     }
 
+    /**
+     * Reset state per request (Serap singleton).
+     */
     public function reset(): void
     {
         $this->spans = [];
@@ -377,11 +575,11 @@ class Serap
         $this->markTimestamps = [];
 
         $this->activeSpans = [];
+        $this->spanStack = [];
 
         $this->anchorMonoNs = 0;
         $this->laravelStartWall = $this->resolveLaravelStartWall();
 
-        // legacy timestamps
         $this->appBoot = '';
         $this->appRegistered = '';
         $this->routeMatched = '';
