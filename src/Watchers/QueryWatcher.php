@@ -59,10 +59,10 @@ final class QueryWatcher
 
         $maskedBindings = [];
         // if ($bindingsMode === 'on' || ($bindingsMode === 'local_only' && app()->environment('local'))) {
-            $maskedBindings = $this->mapBindingsWithColumns($event->sql, $bindings);
+        $maskedBindings = $this->mapBindingsWithColumns($event->sql, $bindings);
 
-            // hard cap bindings payload
-            $maskedBindings = self::capArray($maskedBindings, (int) config('serap.payload.max_bindings_fields', 50));
+        // hard cap bindings payload
+        $maskedBindings = self::capArray($maskedBindings, (int) config('serap.payload.max_bindings_fields', 50));
         // }
 
         // --- callsite untuk N+1 detector ---
@@ -80,8 +80,8 @@ final class QueryWatcher
         $csFile = (string) ($callsite['file'] ?? '');
         $csLine = (int) ($callsite['line'] ?? 0);
 
-        $key = $driver . '|' . $connection . '|' . $operation . '|' . $fingerprint . '|'
-            . $csFile . ':' . $csLine;
+        $key = $driver.'|'.$connection.'|'.$operation.'|'.$fingerprint.'|'
+            .$csFile.':'.$csLine;
 
         // === hard caps for SQL payload ===
         $rawSql = (string) $event->sql;
@@ -150,7 +150,7 @@ final class QueryWatcher
         self::$agg['total_queries'] += 1;
         self::$agg['total_duration_ms'] += $durationMs;
 
-        if (!isset(self::$agg['groups'][$key])) {
+        if (! isset(self::$agg['groups'][$key])) {
             self::$agg['groups'][$key] = [
                 'key' => $key,
                 'count' => 0,
@@ -241,6 +241,7 @@ final class QueryWatcher
                 if ($minTotalMs > 0 && $total < $minTotalMs) {
                     return false;
                 }
+
                 return true;
             }
         ));
@@ -251,16 +252,16 @@ final class QueryWatcher
         // key set for N+1
         $nPlusOneKeys = [];
         foreach ($topNPlusOne as $g) {
-            if (!empty($g['key'])) {
+            if (! empty($g['key'])) {
                 $nPlusOneKeys[$g['key']] = true;
             }
         }
-        $hasNPlusOne = !empty($nPlusOneKeys);
+        $hasNPlusOne = ! empty($nPlusOneKeys);
 
         // slow db query?
         $hasSlowDbQuery = false;
         foreach (self::$agg['groups'] as $g) {
-            if (!empty($g['any_slow'])) {
+            if (! empty($g['any_slow'])) {
                 $hasSlowDbQuery = true;
                 break;
             }
@@ -285,7 +286,7 @@ final class QueryWatcher
         if ($hasSlowTransaction) {
             $reasons[] = 'slow_transaction';
         }
-        $forceSampledReason = !empty($reasons) ? implode('|', $reasons) : null;
+        $forceSampledReason = ! empty($reasons) ? implode('|', $reasons) : null;
 
         // get spans once, build index
         $spans = Serap::getSpans();
@@ -302,10 +303,10 @@ final class QueryWatcher
                 $sid = $m['span_id'] ?? null;
                 $key = $m['key'] ?? null;
 
-                if (!is_string($sid) || !isset($idx[$sid])) {
+                if (! is_string($sid) || ! isset($idx[$sid])) {
                     continue;
                 }
-                if (!is_string($key) || !isset($nPlusOneKeys[$key])) {
+                if (! is_string($key) || ! isset($nPlusOneKeys[$key])) {
                     continue;
                 }
 
@@ -418,7 +419,7 @@ final class QueryWatcher
                 'name' => 'DB summary',
                 'level' => ($hasNPlusOne || $hasSlowDbQuery || $hasSlowTransaction) ? 'warning' : 'info',
                 'duration_ms' => 0.0,
-                'sampled' => $forceSampleAll ? true : (!empty($topNPlusOne) ? true : false),
+                'sampled' => $forceSampleAll ? true : (! empty($topNPlusOne) ? true : false),
                 'context' => [
                     'summary' => [
                         'total_queries' => $summary['total_queries'],
@@ -468,19 +469,19 @@ final class QueryWatcher
             $file = $t['file'] ?? null;
             $line = $t['line'] ?? null;
 
-            if (!is_string($file) || $file === '') {
+            if (! is_string($file) || $file === '') {
                 continue;
             }
 
             $f = str_replace(['\\', '/'], DIRECTORY_SEPARATOR, $file);
 
             // skip vendor
-            if (str_contains($f, DIRECTORY_SEPARATOR . 'vendor' . DIRECTORY_SEPARATOR)) {
+            if (str_contains($f, DIRECTORY_SEPARATOR.'vendor'.DIRECTORY_SEPARATOR)) {
                 continue;
             }
 
             // skip package serap
-            if (str_contains($f, DIRECTORY_SEPARATOR . 'packages' . DIRECTORY_SEPARATOR . 'luang-dev' . DIRECTORY_SEPARATOR . 'serap' . DIRECTORY_SEPARATOR)) {
+            if (str_contains($f, DIRECTORY_SEPARATOR.'packages'.DIRECTORY_SEPARATOR.'luang-dev'.DIRECTORY_SEPARATOR.'serap'.DIRECTORY_SEPARATOR)) {
                 continue;
             }
 
@@ -507,8 +508,8 @@ final class QueryWatcher
 
             // prefer routes/ atau app/
             if (
-                str_contains($outFile, 'routes' . DIRECTORY_SEPARATOR) ||
-                str_contains($outFile, 'app' . DIRECTORY_SEPARATOR)
+                str_contains($outFile, 'routes'.DIRECTORY_SEPARATOR) ||
+                str_contains($outFile, 'app'.DIRECTORY_SEPARATOR)
             ) {
                 return $candidate;
             }
@@ -527,13 +528,15 @@ final class QueryWatcher
     protected function getQueryType(string $sql): string
     {
         $s = ltrim($sql);
+
         return strtoupper(strtok($s, " \t\n\r")) ?: 'UNKNOWN';
     }
 
     protected function shortName(string $sql): string
     {
         $op = $this->getQueryType($sql);
-        return $op !== 'UNKNOWN' ? $op . ' query' : 'DB query';
+
+        return $op !== 'UNKNOWN' ? $op.' query' : 'DB query';
     }
 
     protected function shouldSkipQuery(string $sql): bool
@@ -542,9 +545,9 @@ final class QueryWatcher
 
         foreach ($skipTables as $table) {
             if (
-                stripos($sql, '"' . $table . '"') !== false ||
-                stripos($sql, '`' . $table . '`') !== false ||
-                stripos($sql, ' ' . $table . ' ') !== false
+                stripos($sql, '"'.$table.'"') !== false ||
+                stripos($sql, '`'.$table.'`') !== false ||
+                stripos($sql, ' '.$table.' ') !== false
             ) {
                 return true;
             }
@@ -564,6 +567,7 @@ final class QueryWatcher
         $s = $this->normalizeSqlForUi($sql);
         $cap = (int) config('serap.payload.max_fingerprint_sql_len', 500);
         $s = self::capString($s, $cap);
+
         return md5($s);
     }
 
@@ -601,10 +605,10 @@ final class QueryWatcher
 
                 if ($op === 'BETWEEN') {
                     if (isset($bindings[$bindingIndex])) {
-                        $mapped[$col . '_from'] = $this->maskIfSensitive($col, $bindings[$bindingIndex++], $sensitive);
+                        $mapped[$col.'_from'] = $this->maskIfSensitive($col, $bindings[$bindingIndex++], $sensitive);
                     }
                     if (isset($bindings[$bindingIndex])) {
-                        $mapped[$col . '_to'] = $this->maskIfSensitive($col, $bindings[$bindingIndex++], $sensitive);
+                        $mapped[$col.'_to'] = $this->maskIfSensitive($col, $bindings[$bindingIndex++], $sensitive);
                     }
                 } elseif ($op === 'IN') {
                     if (preg_match('/\bIN\s*\(([^)]+)\)/i', $match[0], $inMatch)) {
@@ -667,7 +671,7 @@ final class QueryWatcher
 
     private static function labelNPlusOne(?array $group): ?string
     {
-        if (!is_array($group)) {
+        if (! is_array($group)) {
             return null;
         }
 
@@ -721,12 +725,12 @@ final class QueryWatcher
                 $norm[] = is_string($b) ? self::capString($b, 120) : $b;
             } else {
                 // objects/resources -> type only
-                $norm[] = is_object($b) ? ('obj:' . get_class($b)) : gettype($b);
+                $norm[] = is_object($b) ? ('obj:'.get_class($b)) : gettype($b);
             }
         }
 
         $json = json_encode($norm);
-        if (!is_string($json)) {
+        if (! is_string($json)) {
             return null;
         }
 
@@ -745,13 +749,13 @@ final class QueryWatcher
             return $s;
         }
 
-        return substr($s, 0, max(0, $maxLen - 1)) . '…';
+        return substr($s, 0, max(0, $maxLen - 1)).'…';
     }
 
     /**
      * Cap associative array by number of keys; preserves first N keys.
      *
-     * @param array<mixed,mixed> $arr
+     * @param  array<mixed,mixed>  $arr
      * @return array<mixed,mixed>
      */
     private static function capArray(array $arr, int $maxKeys): array

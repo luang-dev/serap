@@ -269,7 +269,7 @@ class Serap
 
         if ($this->transaction['duration_ms'] > 1000) {
             $this->transaction['sampled'] = true;
-            
+
             if ($this->transaction['context']['response']['status'] >= 500) {
                 $this->transaction['level'] = 'error';
             } else {
