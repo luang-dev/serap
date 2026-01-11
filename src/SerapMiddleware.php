@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Context;
 use Illuminate\Support\Str;
 use LuangDev\Serap\Facades\Serap;
+use LuangDev\Serap\Watchers\QueryWatcher;
 use Symfony\Component\HttpFoundation\Response;
 
 class SerapMiddleware
@@ -110,10 +111,10 @@ class SerapMiddleware
     {
         Serap::mark('middleware_terminated');
 
-        // finalize always (so duration exists even if not sampled)
+        QueryWatcher::flush();
+
         Serap::finalizeTransaction();
 
-        // Export normal only if sampled (exporter will gate)
         app(JsonlExporter::class)->export();
 
         Serap::reset();

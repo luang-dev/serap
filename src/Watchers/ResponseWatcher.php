@@ -54,6 +54,7 @@ final class ResponseWatcher
         }
 
         // finalize duration + attach marks into transaction.context
-        Serap::finalizeTransaction();
+        // QueryWatcher::flush();
+        // Serap::finalizeTransaction();
     }
 }

@@ -138,8 +138,8 @@ final class ExceptionWatcher
         if ($capturePreview && is_string($file) && $file !== '' && is_file($file) && is_readable($file)) {
             $lines = @file($file, FILE_IGNORE_NEW_LINES);
             if (is_array($lines)) {
-                $start = max($line - 10, 1);
-                $end = min($line + 10, count($lines));
+                $start = max($line - 15, 1);
+                $end = min($line + 15, count($lines));
 
                 for ($i = $start; $i <= $end; $i++) {
                     $content = $lines[$i - 1] ?? '';
